@@ -24,7 +24,8 @@ import {
   Building2,
   Briefcase,
   MapPin,
-  DollarSign
+  DollarSign,
+  User
 } from 'lucide-react';
 
 const SAMPLE_RESUME_TEXT = `Alex Mercer
