@@ -1,0 +1,234 @@
+import uuid
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select, desc
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+
+from app.database import get_db
+from app.models.user import User
+from app.models.job import Job, JobMatch, Source
+from app.models.profile import MasterProfile
+from app.models.preference import JobPreference
+from app.schemas.job import JobResponse, JobMatchResponse, JobCreate
+from app.api.deps import get_current_user
+from app.services.discovery_service import discovery_service, compute_dedupe_hash
+from app.services.scoring_service import scoring_service
+
+router = APIRouter(prefix="/jobs", tags=["Job Discovery & Matching"])
+
+
+class JobActionRequest(BaseModel):
+    action: str  # "queue", "dismiss", "restore"
+
+
+class ManualJobIngestRequest(BaseModel):
+    company_name: str
+    title: str
+    location: str = "Remote"
+    workplace_type: str = "Remote"
+    job_type: str = "Full-time"
+    salary_range: Optional[str] = None
+    jd_text: str
+    apply_url: str
+
+
+@router.post("/discover", response_model=List[JobMatchResponse])
+async def trigger_discovery(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Triggers on-demand discovery across ATS boards (Greenhouse, Lever, Ashby),
+    deduplicates against database, and scores all matching jobs against candidate profile.
+    """
+    # 1. Fetch user preferences
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+    if not prefs:
+        prefs = JobPreference(user_id=current_user.id)
+        db.add(prefs)
+        await db.commit()
+        await db.refresh(prefs)
+
+    # 2. Fetch primary master profile
+    prof_res = await db.execute(
+        select(MasterProfile).where(
+            MasterProfile.user_id == current_user.id,
+            MasterProfile.is_primary == True
+        )
+    )
+    profile = prof_res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Master Profile not found. Please upload your resume first before discovering jobs."
+        )
+
+    # 3. Run Discovery
+    jobs = await discovery_service.discover_jobs_for_user(
+        db=db,
+        user_id=current_user.id,
+        preferences=prefs
+    )
+
+    # 4. Score all discovered jobs
+    matches: List[JobMatch] = []
+    for job in jobs[:25]:  # Batch score top discovered jobs
+        match = await scoring_service.calculate_match(
+            db=db,
+            user_id=current_user.id,
+            job=job,
+            profile=profile,
+            preferences=prefs
+        )
+        # Load job relationship for response serialization
+        match.job = job
+        matches.append(match)
+
+    # Sort matches by score descending
+    matches.sort(key=lambda m: m.match_score, reverse=True)
+    return matches
+
+
+@router.get("/matches", response_model=List[JobMatchResponse])
+async def list_job_matches(
+    match_status: Optional[str] = Query(None, description="discovered, queued, tailored, applied, dismissed"),
+    min_score: Optional[float] = Query(None, ge=0, le=100),
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List scored job matches with filtering by status and match threshold"""
+    query = (
+        select(JobMatch)
+        .options(selectinload(JobMatch.job))
+        .where(JobMatch.user_id == current_user.id)
+        .order_by(desc(JobMatch.match_score))
+    )
+
+    if match_status and match_status != "all":
+        query = query.where(JobMatch.status == match_status)
+    if min_score is not None:
+        query = query.where(JobMatch.match_score >= min_score)
+
+    result = await db.execute(query)
+    matches = result.scalars().all()
+
+    if search:
+        s_lower = search.lower()
+        matches = [
+            m for m in matches
+            if s_lower in m.job.title.lower() or s_lower in m.job.company_name.lower() or s_lower in m.job.location.lower()
+        ]
+
+    return matches
+
+
+@router.get("/{job_id}", response_model=JobResponse)
+async def get_job_details(
+    job_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve full job details including full JD text and requirements"""
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    return job
+
+
+@router.post("/{job_id}/action", response_model=JobMatchResponse)
+async def update_job_match_status(
+    job_id: uuid.UUID,
+    body: JobActionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Move job match between states: 'queued' (ready for tailoring), 'dismissed', 'discovered'"""
+    result = await db.execute(
+        select(JobMatch)
+        .options(selectinload(JobMatch.job))
+        .where(JobMatch.job_id == job_id, JobMatch.user_id == current_user.id)
+    )
+    match = result.scalar_one_or_none()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job match not found for user")
+
+    valid_actions = {
+        "queue": "queued",
+        "dismiss": "dismissed",
+        "restore": "discovered",
+    }
+    new_status = valid_actions.get(body.action)
+    if not new_status:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid action '{body.action}'")
+
+    match.status = new_status
+    await db.commit()
+    await db.refresh(match)
+    return match
+
+
+@router.post("/manual-add", response_model=JobMatchResponse)
+async def manually_add_job(
+    body: ManualJobIngestRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Manually paste any Job Description or custom URL to parse, score, and queue instantly.
+    """
+    # Check Master Profile
+    prof_res = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == current_user.id, MasterProfile.is_primary == True)
+    )
+    profile = prof_res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload your resume first.")
+
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+    if not prefs:
+        prefs = JobPreference(user_id=current_user.id)
+        db.add(prefs)
+        await db.commit()
+
+    dedupe_hash = compute_dedupe_hash(body.company_name, body.title, body.location)
+    source = await discovery_service.get_or_create_source(db, "manual", source_type="manual")
+
+    existing_job_res = await db.execute(select(Job).where(Job.dedupe_hash == dedupe_hash))
+    job = existing_job_res.scalar_one_or_none()
+
+    if not job:
+        job = Job(
+            id=uuid.uuid4(),
+            source_id=source.id,
+            company_name=body.company_name,
+            title=body.title,
+            location=body.location,
+            workplace_type=body.workplace_type,
+            job_type=body.job_type,
+            salary_range=body.salary_range,
+            jd_text=body.jd_text,
+            apply_url=body.apply_url,
+            ats_type="manual",
+            dedupe_hash=dedupe_hash,
+            is_active=True,
+        )
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
+
+    # Score job
+    match = await scoring_service.calculate_match(
+        db=db,
+        user_id=current_user.id,
+        job=job,
+        profile=profile,
+        preferences=prefs
+    )
+    match.job = job
+    return match
