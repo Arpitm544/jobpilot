@@ -104,8 +104,8 @@ Visit `http://localhost:3000`.
 
 ## 🗺️ Build Roadmap
 - [x] **Phase 1: Auth + Resume Parsing + Master Profile Editor**
-- [ ] **Phase 2: Job Discovery (Greenhouse/Lever/Ashby feeds) + Dedupe + Scoring**
-- [ ] **Phase 3: Tailoring Engine + PDF Rendering + Claim Verification**
-- [ ] **Phase 4: Review-Mode Dashboard + Dry-Run Apply for Greenhouse/Lever**
-- [ ] **Phase 5: Full Apply Engine + Queues + Notifications**
-- [ ] **Phase 6: Gmail Tracking, Analytics, Chrome Extension, Extras**
+- [x] **Phase 2: Job Discovery (Greenhouse/Lever/Ashby feeds) + Dedupe + Scoring**
+- [x] **Phase 3: Tailoring Engine + ATS PDF Rendering + Dual-Pass Claim Verification**
+- [x] **Phase 4: Review-Mode Dashboard + Kanban Pipeline + Playwright Dry-Run Proofs**
+- [x] **Phase 5: Full Apply Engine + Celery Worker Fleet + Live Telemetry WebSockets + Kill Switch**
+- [x] **Phase 6: Inbound Email Tracking & Sync + Analytics Dashboard + AI Follow-Up Generator + Manifest V3 Chrome Extension**

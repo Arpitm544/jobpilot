@@ -12,6 +12,7 @@ from app.models.profile import MasterProfile, QuestionBank
 from app.models.application import TailoredResume, Application, ApplicationEvent
 from app.adapters.form_fillers.greenhouse import GreenhouseFormFiller
 from app.adapters.form_fillers.lever import LeverFormFiller
+from app.adapters.form_fillers.ashby import AshbyFormFiller
 from app.adapters.form_fillers.base import FormFillerResult
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ class ApplyService:
     def __init__(self):
         self.greenhouse_filler = GreenhouseFormFiller()
         self.lever_filler = LeverFormFiller()
+        self.ashby_filler = AshbyFormFiller()
 
     def select_filler(self, ats_type: str, apply_url: str):
         ats = ats_type.lower()
@@ -29,6 +31,8 @@ class ApplyService:
             return self.greenhouse_filler
         elif "lever" in ats or "lever.co" in url:
             return self.lever_filler
+        elif "ashby" in ats or "ashbyhq.com" in url:
+            return self.ashby_filler
         else:
             # Fallback to Greenhouse form structure
             return self.greenhouse_filler

@@ -11,6 +11,7 @@ from app.api.v1.preferences import router as preferences_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.tailor import router as tailor_router
 from app.api.v1.apply import router as apply_router
+from app.api.v1.analytics import router as analytics_router
 from app.api.v1.ws import router as ws_router
 
 # Configure logging
@@ -59,6 +60,7 @@ app.include_router(preferences_router, prefix=settings.API_V1_STR)
 app.include_router(jobs_router, prefix=settings.API_V1_STR)
 app.include_router(tailor_router, prefix=settings.API_V1_STR)
 app.include_router(apply_router, prefix=settings.API_V1_STR)
+app.include_router(analytics_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router, prefix=settings.API_V1_STR)
 
 
