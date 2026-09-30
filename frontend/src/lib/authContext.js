@@ -24,6 +24,10 @@ export function AuthProvider({ children }) {
       setUser(res.data);
     } catch (err) {
       console.error('Failed to fetch user:', err);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('jobpilot_access_token');
+        localStorage.removeItem('jobpilot_refresh_token');
+      }
       setUser(null);
     } finally {
       setLoading(false);

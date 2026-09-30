@@ -83,13 +83,16 @@ async def seed_demo_user():
                 profile = MasterProfile(
                     id=uuid.uuid4(),
                     user_id=demo_user.id,
+                    version_name="Primary Master Profile",
                     is_primary=True,
-                    full_name="Alex Mercer",
-                    email="demo@jobpilot.io",
-                    phone="+1 (555) 382-9901",
-                    location="San Francisco, CA",
-                    linkedin_url="https://linkedin.com/in/alexmercer",
-                    github_url="https://github.com/alexmercer",
+                    contact_info={
+                        "full_name": "Alex Mercer",
+                        "email": "demo@jobpilot.io",
+                        "phone": "+1 (555) 382-9901",
+                        "location": "San Francisco, CA",
+                        "linkedin": "https://linkedin.com/in/alexmercer",
+                        "github": "https://github.com/alexmercer"
+                    },
                     summary="Full-Stack Software Engineer with 4+ years of experience building high-scale distributed systems, microservices, and React/Next.js frontends.",
                     skills={
                         "languages": ["Python", "JavaScript", "TypeScript", "SQL", "HTML", "CSS"],
