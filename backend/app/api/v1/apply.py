@@ -3,7 +3,8 @@ import uuid
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select, desc
+from datetime import datetime, timezone
+from sqlalchemy import select, desc, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -11,10 +12,13 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.user import User
 from app.models.job import Job, JobMatch
+from app.models.preference import JobPreference
 from app.models.application import Application, TailoredResume, ApplicationEvent
 from app.schemas.application import ApplicationResponse
 from app.api.deps import get_current_user
 from app.services.apply_service import apply_service
+from app.services.task_runner import task_runner
+from app.services.event_stream import event_stream
 
 router = APIRouter(prefix="/apply", tags=["Auto-Apply & Pipeline Engine"])
 
@@ -212,3 +216,133 @@ async def get_proof_screenshot(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proof screenshot not found")
 
     return FileResponse(app.submission_proof_screenshot, media_type="image/png")
+
+
+@router.get("/safety-status")
+async def get_safety_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns safety metrics:
+    - Daily application quota and applied count
+    - Emergency Kill Switch state
+    - Current apply mode (review_then_apply vs auto_apply)
+    """
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+
+    daily_cap = prefs.daily_cap if prefs else 15
+    kill_switch = prefs.kill_switch if prefs else False
+    apply_mode = prefs.apply_mode if prefs else "review_then_apply"
+
+    now = datetime.now(timezone.utc)
+    start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+
+    count_res = await db.execute(
+        select(func.count(Application.id))
+        .where(
+            Application.user_id == current_user.id,
+            Application.status.in_(["applied", "review_ready"]),
+            Application.created_at >= start_of_day
+        )
+    )
+    applied_today = count_res.scalar() or 0
+    remaining = max(0, daily_cap - applied_today)
+
+    return {
+        "daily_cap": daily_cap,
+        "applied_today": applied_today,
+        "remaining_today": remaining,
+        "kill_switch_active": kill_switch,
+        "apply_mode": apply_mode,
+        "is_cap_reached": applied_today >= daily_cap
+    }
+
+
+class KillSwitchRequest(BaseModel):
+    kill_switch: Optional[bool] = None  # None toggles, bool sets explicit state
+
+
+@router.post("/kill-switch")
+async def toggle_kill_switch(
+    request: KillSwitchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Instant Emergency Kill Switch:
+    Immediately halts all automated applying operations for the user.
+    """
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+    if not prefs:
+        prefs = JobPreference(user_id=current_user.id, kill_switch=True)
+        db.add(prefs)
+    else:
+        if request.kill_switch is not None:
+            prefs.kill_switch = request.kill_switch
+        else:
+            prefs.kill_switch = not prefs.kill_switch
+
+    await db.commit()
+    await db.refresh(prefs)
+
+    status_str = "ACTIVE (ALL AGENTS STOPPED)" if prefs.kill_switch else "DISENGAGED (OPERATIONAL)"
+    event_msg = f"Emergency Kill Switch is now {status_str}"
+
+    # Broadcast event via WebSocket to user
+    await event_stream.emit_event(
+        user_id=str(current_user.id),
+        event_type="KILL_SWITCH_UPDATED",
+        message=event_msg,
+        payload={"kill_switch_active": prefs.kill_switch}
+    )
+
+    return {
+        "kill_switch_active": prefs.kill_switch,
+        "message": event_msg
+    }
+
+
+class QueueAutoApplyRequest(BaseModel):
+    match_ids: List[uuid.UUID]
+    is_dry_run: bool = True
+
+
+@router.post("/queue-auto")
+async def queue_auto_apply(
+    request: QueueAutoApplyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dispatches matches to background application worker queue (Celery or Async task fleet)
+    with human-like delays, quota checking, and kill-switch guardrails.
+    """
+    if not request.match_ids:
+        raise HTTPException(status_code=400, detail="No match IDs provided to queue")
+
+    # Safety Pre-check
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+    if prefs and prefs.kill_switch:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot queue applications while Emergency Kill Switch is ACTIVE. Disengage kill switch first."
+        )
+
+    # Dispatch to background task runner
+    result = task_runner.dispatch_batch_apply(
+        user_id=current_user.id,
+        match_ids=request.match_ids,
+        is_dry_run=request.is_dry_run
+    )
+
+    return {
+        "status": "queued",
+        "count": len(request.match_ids),
+        "execution_mode": result["mode"],
+        "task_id": result["task_id"],
+        "message": f"Queued {len(request.match_ids)} jobs for automated processing."
+    }
