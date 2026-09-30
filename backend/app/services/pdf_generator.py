@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import asyncio
 from typing import Dict, Any, Optional
 from jinja2 import Template
 
@@ -279,24 +280,28 @@ class PDFGeneratorService:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # Try Playwright for pixel-perfect PDF rendering
+        # Try Playwright for pixel-perfect PDF rendering with strict timeout
         try:
-            from playwright.async_api import async_playwright
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
-                await page.set_content(html_content, wait_until="networkidle")
-                await page.pdf(
-                    path=pdf_path,
-                    format="Letter",
-                    print_background=True,
-                    margin={"top": "0.4in", "bottom": "0.4in", "left": "0.5in", "right": "0.5in"}
-                )
-                await browser.close()
+            async def _render():
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    page = await browser.new_page()
+                    await page.set_content(html_content, wait_until="domcontentloaded", timeout=6000)
+                    await page.pdf(
+                        path=pdf_path,
+                        format="Letter",
+                        print_background=True,
+                        margin={"top": "0.4in", "bottom": "0.4in", "left": "0.5in", "right": "0.5in"}
+                    )
+                    await browser.close()
+                return pdf_path
+
+            await asyncio.wait_for(_render(), timeout=10.0)
             logger.info(f"Playwright generated PDF successfully: {pdf_path}")
             return pdf_path
         except Exception as e:
-            logger.warning(f"Playwright PDF generation failed or browser not installed ({e}). Using HTML file as fallback artifact.")
+            logger.warning(f"Playwright PDF generation skipped/timed out ({e}). Using HTML file as fallback artifact.")
 
         # Fallback: create placeholder PDF or return path
         if not os.path.exists(pdf_path):

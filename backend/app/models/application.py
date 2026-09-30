@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Text, Float, Integer, 
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.models.user import GUID
+from app.models.user import GUID, utc_now
 
 
 class TailoredResume(Base):
@@ -25,7 +25,7 @@ class TailoredResume(Base):
     claim_verification_notes = Column(JSON, default=dict, nullable=False)
     ats_keyword_match_pct = Column(Float, default=0.0, nullable=False)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
     job_match = relationship("JobMatch", back_populates="tailored_resume")
@@ -54,14 +54,14 @@ class Application(Base):
     deep_link_url = Column(String(1024), nullable=True) # Deep link if CAPTCHA or user intervention is required
     
     applied_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="applications")
-    job = relationship("Job", back_populates="applications")
-    tailored_resume = relationship("TailoredResume", back_populates="application")
-    events = relationship("ApplicationEvent", back_populates="application", cascade="all, delete-orphan")
+    job = relationship("Job", back_populates="applications", lazy="selectin")
+    tailored_resume = relationship("TailoredResume", back_populates="application", lazy="selectin")
+    events = relationship("ApplicationEvent", back_populates="application", lazy="selectin", cascade="all, delete-orphan")
 
 
 class ApplicationEvent(Base):
@@ -73,7 +73,7 @@ class ApplicationEvent(Base):
     message = Column(Text, nullable=False)
     event_payload = Column(JSON, default=dict, nullable=False)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationship
     application = relationship("Application", back_populates="events")

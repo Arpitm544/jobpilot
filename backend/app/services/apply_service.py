@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import utc_now
 from app.models.job import Job, JobMatch
 from app.models.profile import MasterProfile, QuestionBank
 from app.models.application import TailoredResume, Application, ApplicationEvent
@@ -71,8 +72,8 @@ class ApplyService:
                 status="tailored" if tailored_id else "queued",
                 apply_mode_used="review_then_apply",
                 is_dry_run=True,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=utc_now(),
+                updated_at=utc_now(),
             )
             db.add(application)
             await db.flush()
@@ -153,7 +154,7 @@ class ApplyService:
         application.submission_proof_screenshot = result.screenshot_path
         application.submission_proof_text = result.proof_text or f"Dry-run executed for {job.title} at {job.company_name}."
         application.status = "review_ready"
-        application.updated_at = datetime.now(timezone.utc)
+        application.updated_at = utc_now()
 
         # Log application event
         event = ApplicationEvent(
@@ -162,7 +163,7 @@ class ApplyService:
             event_type="DRY_RUN_COMPLETED",
             message=f"Playwright filled application form in dry-run mode without submitting.",
             event_payload=result.to_dict(),
-            created_at=datetime.now(timezone.utc)
+            created_at=utc_now()
         )
         db.add(event)
 
@@ -187,8 +188,8 @@ class ApplyService:
             raise ValueError("Application not found.")
 
         application.status = "applied"
-        application.applied_at = datetime.now(timezone.utc)
-        application.updated_at = datetime.now(timezone.utc)
+        application.applied_at = utc_now()
+        application.updated_at = utc_now()
 
         event = ApplicationEvent(
             id=uuid.uuid4(),
@@ -196,7 +197,7 @@ class ApplyService:
             event_type="APPLICATION_APPROVED",
             message="Candidate approved application. Status marked as APPLIED.",
             event_payload={"applied_at": str(application.applied_at)},
-            created_at=datetime.now(timezone.utc)
+            created_at=utc_now()
         )
         db.add(event)
 

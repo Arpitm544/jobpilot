@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Optional, Type, TypeVar, List
@@ -32,7 +33,7 @@ class GeminiService:
                 from google import genai
                 self.client = genai.Client(api_key=self.api_key)
             except Exception as e:
-                logger.error(f"Error creating genai.Client: {e}")
+                logger.warning(f"Could not initialize genai.Client: {e}")
 
     def is_available(self) -> bool:
         return self.client is not None and bool(self.api_key)
@@ -52,17 +53,38 @@ class GeminiService:
             from google.genai import types
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=response_schema,
                 system_instruction=system_instruction,
                 temperature=0.2,
             )
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=config,
-            )
+            try:
+                config.response_schema = response_schema
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model,
+                    contents=prompt,
+                    config=config,
+                )
+            except ValueError as ve:
+                if "additionalProperties" in str(ve):
+                    config.response_schema = None
+                    schema_desc = json.dumps(response_schema.model_json_schema())
+                    fallback_prompt = f"{prompt}\n\nRespond with strictly valid JSON matching this schema:\n{schema_desc}"
+                    response = await asyncio.to_thread(
+                        self.client.models.generate_content,
+                        model=self.model,
+                        contents=fallback_prompt,
+                        config=config,
+                    )
+                else:
+                    raise ve
+
             if response.text:
-                data = json.loads(response.text)
+                raw_text = response.text.strip()
+                if "```json" in raw_text:
+                    raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in raw_text:
+                    raw_text = raw_text.split("```")[1].split("```")[0].strip()
+                data = json.loads(raw_text)
                 return response_schema.model_validate(data)
         except Exception as e:
             logger.error(f"Gemini structured generation failed: {e}", exc_info=True)
@@ -71,18 +93,20 @@ class GeminiService:
     async def get_embedding(self, text: str) -> List[float]:
         """Get embedding vector using Gemini embeddings"""
         if not self.is_available():
-            # Return dummy 768-dim vector for dev testing
             return [0.0] * 768
 
         try:
-            result = self.client.models.embed_content(
+            result = await asyncio.to_thread(
+                self.client.models.embed_content,
                 model=self.embedding_model,
-                contents=text
+                contents=text,
             )
-            if hasattr(result, "embeddings") and result.embeddings:
-                return result.embeddings[0].values
+            if hasattr(result, "embedding") and hasattr(result.embedding, "values"):
+                return list(result.embedding.values)
+            elif hasattr(result, "embeddings") and len(result.embeddings) > 0:
+                return list(result.embeddings[0].values)
         except Exception as e:
-            logger.error(f"Gemini embedding error: {e}")
+            logger.error(f"Gemini embedding generation failed: {e}")
         return [0.0] * 768
 
 

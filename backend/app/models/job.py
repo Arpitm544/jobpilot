@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Text, Float, ForeignKe
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.models.user import GUID
+from app.models.user import GUID, utc_now
 
 
 class Source(Base):
@@ -17,7 +17,7 @@ class Source(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     source_metadata = Column(JSON, default=dict, nullable=False)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
     jobs = relationship("Job", back_populates="source", cascade="all, delete-orphan")
@@ -46,7 +46,7 @@ class Job(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     
     posted_date = Column(DateTime, nullable=True)
-    discovered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    discovered_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
     source = relationship("Source", back_populates="jobs")
@@ -71,7 +71,7 @@ class JobMatch(Base):
     
     # Status in the candidate funnel: "discovered", "queued", "tailoring", "tailored", "dismissed", "applied"
     status = Column(String(50), default="discovered", nullable=False, index=True)
-    evaluated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    evaluated_at = Column(DateTime, default=utc_now, nullable=False)
 
     # Relationships
     job = relationship("Job", back_populates="matches")

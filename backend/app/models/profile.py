@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.models.user import GUID
+from app.models.user import GUID, utc_now
 
 
 class MasterProfile(Base):
@@ -28,8 +28,8 @@ class MasterProfile(Base):
     original_filename = Column(String(255), nullable=True)
     raw_extracted_text = Column(Text, nullable=True)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="master_profiles")
@@ -60,8 +60,8 @@ class QuestionBank(Base):
     diversity_answers = Column(JSON, default=dict, nullable=False)
     custom_answers = Column(JSON, default=dict, nullable=False)  # Key-value store of past answered freeform questions
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationship
     user = relationship("User", back_populates="question_bank")

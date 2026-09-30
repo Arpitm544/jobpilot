@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import utc_now
 from app.models.job import Job
 from app.models.application import Application, ApplicationEvent
 from app.services.event_stream import event_stream
@@ -117,7 +118,7 @@ class EmailTrackerService:
         if matched_app and new_status and matched_app.status != new_status:
             old_status = matched_app.status
             matched_app.status = new_status
-            matched_app.updated_at = datetime.now(timezone.utc)
+            matched_app.updated_at = utc_now()
 
             event = ApplicationEvent(
                 id=uuid.uuid4(),
@@ -129,7 +130,7 @@ class EmailTrackerService:
                     "subject": subject,
                     "classification": classification
                 },
-                created_at=datetime.now(timezone.utc)
+                created_at=utc_now()
             )
             db.add(event)
             await db.commit()

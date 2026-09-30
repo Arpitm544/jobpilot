@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import utc_now
 from app.models.job import Job, JobMatch
 from app.models.profile import MasterProfile, QuestionBank
 from app.models.application import TailoredResume
@@ -360,7 +361,7 @@ Instructions:
                 claim_verification_passed=verification.all_claims_verified,
                 claim_verification_notes=verification.model_dump(),
                 ats_keyword_match_pct=ats_score,
-                created_at=datetime.now(timezone.utc)
+                created_at=utc_now()
             )
             db.add(tailored_resume)
 
