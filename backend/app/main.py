@@ -9,6 +9,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.profile import router as profile_router
 from app.api.v1.preferences import router as preferences_router
 from app.api.v1.jobs import router as jobs_router
+from app.api.v1.tailor import router as tailor_router
 
 # Configure logging
 logging.basicConfig(
@@ -54,6 +55,7 @@ app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(profile_router, prefix=settings.API_V1_STR)
 app.include_router(preferences_router, prefix=settings.API_V1_STR)
 app.include_router(jobs_router, prefix=settings.API_V1_STR)
+app.include_router(tailor_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health", tags=["Health"])

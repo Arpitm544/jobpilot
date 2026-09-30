@@ -25,8 +25,10 @@ import {
   Send,
   Zap,
   Check,
-  Ban
+  Ban,
+  FileCheck
 } from 'lucide-react';
+import TailorModal from '@/components/tailor/TailorModal';
 
 export default function JobsPage() {
   const { user } = useAuth();
@@ -37,6 +39,7 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [minScore, setMinScore] = useState(60);
   const [expandedJobId, setExpandedJobId] = useState(null);
+  const [selectedTailorMatch, setSelectedTailorMatch] = useState(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
@@ -384,7 +387,20 @@ export default function JobsPage() {
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="flex items-center gap-3 shrink-0 self-end lg:self-center">
+                    <div className="flex items-center gap-2.5 shrink-0 self-end lg:self-center flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTailorMatch(m)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
+                          m.status === 'tailored'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                            : 'bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white shadow-indigo-600/25'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{m.status === 'tailored' ? 'View Tailored Resume' : 'Tailor Resume'}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setExpandedJobId(isExpanded ? null : m.id)}
@@ -630,6 +646,17 @@ export default function JobsPage() {
             </div>
           </div>
         )}
+        {/* Modal: Tailoring & Diff Viewer */}
+        <TailorModal
+          isOpen={!!selectedTailorMatch}
+          jobMatch={selectedTailorMatch}
+          onClose={() => setSelectedTailorMatch(null)}
+          onTailorComplete={(tailored) => {
+            setMatches((prev) =>
+              prev.map((m) => (m.id === selectedTailorMatch?.id ? { ...m, status: 'tailored' } : m))
+            );
+          }}
+        />
       </main>
     </div>
   );
