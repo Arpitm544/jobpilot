@@ -40,4 +40,5 @@ class UserResponse(BaseModel):
 
 class AuthResponse(BaseModel):
     user: UserResponse
-    tokens: TokenResponse
+    message: str = "Authenticated successfully"
+    tokens: Optional[TokenResponse] = None

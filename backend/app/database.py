@@ -152,5 +152,8 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database initialized successfully.")
-    await seed_demo_user()
+    # Remove demo/hardcoded users from production paths
+    if settings.ENVIRONMENT != "production" and getattr(settings, "SEED_DEMO_USER", False):
+        await seed_demo_user()
+
 

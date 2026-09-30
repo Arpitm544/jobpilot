@@ -13,7 +13,7 @@ export default function AuthGuard({ children }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push(`/login?redirect=${encodeURIComponent(pathname || '/dashboard')}`);
+      router.push(`/login?next=${encodeURIComponent(pathname || '/pipeline')}`);
     }
   }, [loading, user, router, pathname]);
 
@@ -43,14 +43,14 @@ export default function AuthGuard({ children }) {
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href={`/login?redirect=${encodeURIComponent(pathname || '/dashboard')}`}
+              href={`/login?next=${encodeURIComponent(pathname || '/pipeline')}`}
               className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-medium text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-1.5"
             >
               <span>Sign In</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              href={`/register?redirect=${encodeURIComponent(pathname || '/dashboard')}`}
+              href={`/register?next=${encodeURIComponent(pathname || '/pipeline')}`}
               className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-sm border border-white/10 transition-all flex items-center justify-center"
             >
               <span>Create Account</span>

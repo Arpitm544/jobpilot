@@ -132,10 +132,15 @@ async def get_tailored_resume_by_match(
 @router.get("/{tailored_id}/pdf")
 async def download_tailored_pdf(
     tailored_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Download or view the rendered 1-page ATS PDF"""
-    result = await db.execute(select(TailoredResume).where(TailoredResume.id == tailored_id))
+    result = await db.execute(
+        select(TailoredResume)
+        .join(JobMatch, JobMatch.id == TailoredResume.job_match_id)
+        .where(TailoredResume.id == tailored_id, JobMatch.user_id == current_user.id)
+    )
     tailored = result.scalar_one_or_none()
     if not tailored or not tailored.pdf_storage_path or not os.path.exists(tailored.pdf_storage_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found.")

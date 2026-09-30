@@ -60,10 +60,10 @@ async def test_auth_and_profile_flow(prepare_db):
             "password": test_password
         })
         assert login_res.status_code == 200
-        auth_data = login_res.json()
-        access_token = auth_data["tokens"]["access_token"]
+        access_token = login_res.cookies.get("access_token") or (auth_data.get("tokens") or {}).get("access_token")
+        assert access_token, "No access_token found in cookie or body"
         headers = {"Authorization": f"Bearer {access_token}"}
-        print("  Status: JWT Tokens Issued", flush=True)
+        print("  Status: Cookie-based JWT Issued & Verified", flush=True)
 
         # 3. Create / Update Master Profile
         profile_payload = {

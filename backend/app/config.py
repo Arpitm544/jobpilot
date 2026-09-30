@@ -15,8 +15,13 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = "dGhpcy1pcy1hLTMyLWJ5dGUtYmFzZTY0LWtleS0wMTIzNDU2Nzg5="
     JWT_SECRET_KEY: str = "jobpilot-jwt-super-secret-key-2026-production"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day for dev ease
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 7 * 24 * 60  # 7 days
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    COOKIE_NAME: str = "access_token"
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: Optional[bool] = None
+    COOKIE_DOMAIN: Optional[str] = None
+    SEED_DEMO_USER: bool = False
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./jobpilot.db"
