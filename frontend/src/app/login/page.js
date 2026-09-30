@@ -29,7 +29,7 @@ export default function LoginPage() {
   };
 
   const fillDemo = () => {
-    setEmail('tester@jobpilot.io');
+    setEmail('demo@jobpilot.io');
     setPassword('password123');
   };
 
