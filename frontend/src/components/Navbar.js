@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/authContext';
-import { Sparkles, Compass, User, LogOut, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Sparkles, Compass, User, LogOut, ArrowRight, ShieldCheck, Layers } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -34,9 +34,13 @@ export default function Navbar() {
             <Compass className="w-4 h-4 text-indigo-400" />
             Onboarding
           </Link>
+          <Link href="/dashboard" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-indigo-400" />
+            Pipeline Board
+          </Link>
           <Link href="/dashboard/jobs" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-cyan-400" />
-            Job Discovery & Feeds
+            Job Discovery
           </Link>
           <Link href="/dashboard/profile" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
             <User className="w-4 h-4 text-indigo-400" />

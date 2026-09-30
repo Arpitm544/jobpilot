@@ -28,10 +28,10 @@ class ApplicationResponse(BaseModel):
     failure_reason: Optional[str]
     retry_count: int
     deep_link_url: Optional[str]
-    applied_at: Optional[datetime]
+    applied_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    events: List[ApplicationEventResponse] = []
+    events: Optional[List[ApplicationEventResponse]] = None
 
     model_config = {"from_attributes": True}
 
