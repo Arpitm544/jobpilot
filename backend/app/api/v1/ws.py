@@ -2,9 +2,10 @@ import asyncio
 import json
 import logging
 from typing import Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
+from app.config import settings
 from app.services.event_stream import event_stream
 from app.services.auth_service import decode_token
 from app.api.deps import get_current_user
@@ -22,8 +23,11 @@ async def websocket_endpoint(
 ):
     """
     WebSocket endpoint for real-time agent updates.
-    Accepts JWT token in query param: ws://localhost:8000/api/v1/events/ws?token=<jwt>
+    Accepts JWT token in query param or access_token cookie.
     """
+    if not token:
+        token = websocket.cookies.get(settings.COOKIE_NAME)
+
     user_id = None
     if token:
         payload = decode_token(token)
@@ -54,12 +58,16 @@ async def websocket_endpoint(
 
 @router.get("/stream")
 async def sse_event_stream(
+    request: Request,
     token: Optional[str] = Query(None)
 ):
     """
     Server-Sent Events (SSE) fallback stream.
-    Connect via browser EventSource('/api/v1/events/stream?token=...')
+    Connect via browser EventSource with cookie or query token.
     """
+    if not token:
+        token = request.cookies.get(settings.COOKIE_NAME)
+
     user_id = "anonymous"
     if token:
         payload = decode_token(token)

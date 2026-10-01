@@ -173,6 +173,7 @@ async def update_job_match_status(
 
 
 @router.post("/manual-add", response_model=JobMatchResponse)
+@router.post("/manual", response_model=JobMatchResponse)
 async def manually_add_job(
     body: ManualJobIngestRequest,
     current_user: User = Depends(get_current_user),

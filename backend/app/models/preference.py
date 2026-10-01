@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, J
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.models.user import GUID
+from app.models.user import GUID, utc_now
 
 
 class JobPreference(Base):
@@ -32,8 +32,8 @@ class JobPreference(Base):
     match_threshold = Column(Integer, default=70, nullable=False)     # 0-100 score threshold
     kill_switch = Column(Boolean, default=False, nullable=False)     # Emergency stop for all automated jobs
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationship
     user = relationship("User", back_populates="job_preferences")

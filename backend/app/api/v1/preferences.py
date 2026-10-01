@@ -16,7 +16,8 @@ from app.api.deps import get_current_user
 router = APIRouter(prefix="/preferences", tags=["Job Preferences"])
 
 
-@router.get("/", response_model=JobPreferenceResponse)
+@router.get("", response_model=JobPreferenceResponse)
+@router.get("/", response_model=JobPreferenceResponse, include_in_schema=False)
 async def get_job_preferences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -41,7 +42,8 @@ async def get_job_preferences(
     return prefs
 
 
-@router.put("/", response_model=JobPreferenceResponse)
+@router.put("", response_model=JobPreferenceResponse)
+@router.put("/", response_model=JobPreferenceResponse, include_in_schema=False)
 async def update_job_preferences(
     body: JobPreferenceUpdate,
     current_user: User = Depends(get_current_user),

@@ -207,10 +207,13 @@ async def get_pipeline_board(
 @router.get("/{application_id}/screenshot")
 async def get_proof_screenshot(
     application_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Streams full-page proof screenshot from Playwright dry-run"""
-    result = await db.execute(select(Application).where(Application.id == application_id))
+    result = await db.execute(
+        select(Application).where(Application.id == application_id, Application.user_id == current_user.id)
+    )
     app = result.scalar_one_or_none()
     if not app or not app.submission_proof_screenshot or not os.path.exists(app.submission_proof_screenshot):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proof screenshot not found")

@@ -1,61 +1,127 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from './api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-  useEffect(() => {
-    checkUser();
-  }, []);
-
-  const checkUser = async () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('jobpilot_access_token') : null;
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  // Check current session from backend cookie
+  const checkUser = useCallback(async () => {
     try {
       const res = await api.get('/auth/me');
       setUser(res.data);
     } catch (err) {
-      console.error('Failed to fetch user:', err);
       setUser(null);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Multi-tab logout synchronization via BroadcastChannel
+  useEffect(() => {
+    checkUser();
+
+    let channel;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      channel = new BroadcastChannel('jobpilot_auth_channel');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'LOGOUT') {
+          setUser(null);
+          router.replace('/');
+        } else if (event.data?.type === 'LOGIN') {
+          checkUser();
+        }
+      };
+    }
+
+    const handleAuthExpired = () => {
+      setUser(null);
+      if (channel) {
+        channel.postMessage({ type: 'LOGOUT' });
+      }
+    };
+    window.addEventListener('jobpilot:auth_expired', handleAuthExpired);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener('jobpilot:auth_expired', handleAuthExpired);
+    };
+  }, [checkUser, router]);
+
+  // Login handler: backend sets HTTP-only cookie automatically
+  const login = async (email, password) => {
+    setIsLoading(true);
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      setUser(res.data.user);
+      
+      // Notify other tabs of login
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('jobpilot_auth_channel');
+        channel.postMessage({ type: 'LOGIN' });
+        channel.close();
+      }
+      return res.data.user;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
-    const { user: userData, tokens } = res.data;
-    localStorage.setItem('jobpilot_access_token', tokens.access_token);
-    localStorage.setItem('jobpilot_refresh_token', tokens.refresh_token);
-    setUser(userData);
-    return userData;
-  };
-
+  // Signup / Register handler: backend sets HTTP-only cookie automatically
   const register = async (email, password, full_name) => {
-    const res = await api.post('/auth/register', { email, password, full_name });
-    const { user: userData, tokens } = res.data;
-    localStorage.setItem('jobpilot_access_token', tokens.access_token);
-    localStorage.setItem('jobpilot_refresh_token', tokens.refresh_token);
-    setUser(userData);
-    return userData;
+    setIsLoading(true);
+    try {
+      const res = await api.post('/auth/register', { email, password, full_name });
+      setUser(res.data.user);
+      
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('jobpilot_auth_channel');
+        channel.postMessage({ type: 'LOGIN' });
+        channel.close();
+      }
+      return res.data.user;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem('jobpilot_access_token');
-    localStorage.removeItem('jobpilot_refresh_token');
-    setUser(null);
+  // Logout handler: calls backend POST /auth/logout, invalidates cookie, syncs tabs, redirects to /
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.warn('Logout API error:', e);
+    } finally {
+      setUser(null);
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('jobpilot_auth_channel');
+        channel.postMessage({ type: 'LOGOUT' });
+        channel.close();
+      }
+      router.replace('/');
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser: checkUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        loading: isLoading, // backwards compatibility
+        isAuthenticated: !!user,
+        login,
+        register,
+        signup: register,
+        logout,
+        refreshUser: checkUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON, Integer
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.models.user import GUID
+from app.models.user import GUID, utc_now
 
 
 class MasterProfile(Base):
@@ -13,9 +13,13 @@ class MasterProfile(Base):
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     user_id = Column(GUID(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     version_name = Column(String(100), default="Primary Master Profile", nullable=False)
+    version = Column(Integer, default=1, nullable=False)
     is_primary = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_from_resume_id = Column(GUID(), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Core JSON structures
+    data = Column(JSON, default=dict, nullable=True)  # Full MasterProfileSchema representation
     contact_info = Column(JSON, default=dict, nullable=False)  # {name, email, phone, location, linkedin, github, portfolio}
     summary = Column(Text, nullable=True)
     skills = Column(JSON, default=dict, nullable=False)        # {languages: [], frameworks: [], tools: [], soft_skills: []}
@@ -28,11 +32,13 @@ class MasterProfile(Base):
     original_filename = Column(String(255), nullable=True)
     raw_extracted_text = Column(Text, nullable=True)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="master_profiles")
+    resume = relationship("Resume", back_populates="master_profiles", foreign_keys=[created_from_resume_id])
+    field_meta = relationship("ProfileFieldMeta", back_populates="master_profile", cascade="all, delete-orphan")
     tailored_resumes = relationship("TailoredResume", back_populates="master_profile", cascade="all, delete-orphan")
 
 
@@ -60,8 +66,8 @@ class QuestionBank(Base):
     diversity_answers = Column(JSON, default=dict, nullable=False)
     custom_answers = Column(JSON, default=dict, nullable=False)  # Key-value store of past answered freeform questions
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationship
     user = relationship("User", back_populates="question_bank")

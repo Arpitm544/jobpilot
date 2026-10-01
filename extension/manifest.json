@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot Copilot — 1-Click ATS Clip & Auto-Fill",
+  "version": "1.0.0",
+  "description": "Clip job postings from Greenhouse, Lever, Ashby, LinkedIn, and auto-fill applications directly from your Master Profile.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://localhost:3000/*",
+    "https://*/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JobPilot Copilot",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://jobs.ashbyhq.com/*",
+        "*://*.linkedin.com/jobs/*",
+        "*://*.workable.com/*",
+        "*://*/*job*/*",
+        "*://*/*career*/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ]
+}

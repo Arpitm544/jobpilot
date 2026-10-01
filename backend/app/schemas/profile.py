@@ -24,8 +24,8 @@ class SkillCategories(BaseModel):
 
 
 class ExperienceItem(BaseModel):
-    company: str
-    role: str
+    company: str = ""
+    role: str = ""
     start_date: str = ""
     end_date: str = ""
     is_current: bool = False
@@ -34,7 +34,7 @@ class ExperienceItem(BaseModel):
 
 
 class ProjectItem(BaseModel):
-    title: str
+    title: str = ""
     role: Optional[str] = None
     description: Optional[str] = None
     tech_stack: List[str] = Field(default_factory=list)
@@ -44,8 +44,8 @@ class ProjectItem(BaseModel):
 
 
 class EducationItem(BaseModel):
-    institution: str
-    degree: str
+    institution: str = ""
+    degree: str = ""
     field_of_study: Optional[str] = None
     start_year: Optional[str] = None
     end_year: Optional[str] = None
@@ -53,15 +53,15 @@ class EducationItem(BaseModel):
 
 
 class CertificationItem(BaseModel):
-    name: str
-    issuer: str
+    name: str = ""
+    issuer: str = ""
     date: Optional[str] = None
     url: Optional[str] = None
 
 
 class LinkItem(BaseModel):
-    label: str
-    url: str
+    label: str = ""
+    url: str = ""
 
 
 class MasterProfileData(BaseModel):
