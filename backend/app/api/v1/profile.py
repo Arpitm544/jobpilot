@@ -85,6 +85,7 @@ async def upload_and_parse_resume(
         profile.projects = profile_dict.get("projects", [])
         profile.education = profile_dict.get("education", [])
         profile.certifications = profile_dict.get("certifications", [])
+        profile.achievements = profile_dict.get("achievements", [])
         profile.links = profile_dict.get("links", [])
         profile.original_filename = file.filename
         profile.raw_extracted_text = raw_text
@@ -101,6 +102,7 @@ async def upload_and_parse_resume(
             projects=profile_dict.get("projects", []),
             education=profile_dict.get("education", []),
             certifications=profile_dict.get("certifications", []),
+            achievements=profile_dict.get("achievements", []),
             links=profile_dict.get("links", []),
             original_filename=file.filename,
             raw_extracted_text=raw_text
@@ -167,6 +169,7 @@ async def get_master_profile(
             projects=[],
             education=[],
             certifications=[],
+            achievements=[],
             links=[]
         )
         db.add(profile)
@@ -202,6 +205,7 @@ async def update_master_profile(
             projects=[],
             education=[],
             certifications=[],
+            achievements=[],
             links=[]
         )
         db.add(profile)

@@ -310,6 +310,7 @@ async def get_parsed_resume(
         "projects": profile.projects if profile else [],
         "education": profile.education if profile else [],
         "certifications": profile.certifications if profile else [],
+        "achievements": getattr(profile, "achievements", []) if profile else [],
         "links": profile.links if profile else [],
     }
 

@@ -40,6 +40,8 @@ class ProjectItem(BaseModel):
     tech_stack: List[str] = Field(default_factory=list)
     bullets: List[str] = Field(default_factory=list)
     link: Optional[str] = None
+    github_url: Optional[str] = None
+    demo_url: Optional[str] = None
     metrics: Optional[str] = None
 
 
@@ -50,6 +52,9 @@ class EducationItem(BaseModel):
     start_year: Optional[str] = None
     end_year: Optional[str] = None
     gpa: Optional[str] = None
+    grade_type: Optional[str] = "CGPA"
+    grade_value: Optional[str] = ""
+    secondary_percentage: Optional[str] = None
 
 
 class CertificationItem(BaseModel):
@@ -57,6 +62,13 @@ class CertificationItem(BaseModel):
     issuer: str = ""
     date: Optional[str] = None
     url: Optional[str] = None
+
+
+class AchievementItem(BaseModel):
+    title: str = ""
+    description: Optional[str] = None
+    date: Optional[str] = None
+    issuer: Optional[str] = None
 
 
 class LinkItem(BaseModel):
@@ -72,6 +84,7 @@ class MasterProfileData(BaseModel):
     projects: List[ProjectItem] = Field(default_factory=list)
     education: List[EducationItem] = Field(default_factory=list)
     certifications: List[CertificationItem] = Field(default_factory=list)
+    achievements: List[AchievementItem] = Field(default_factory=list)
     links: List[LinkItem] = Field(default_factory=list)
 
 
@@ -92,6 +105,7 @@ class MasterProfileUpdate(BaseModel):
     projects: Optional[List[ProjectItem]] = None
     education: Optional[List[EducationItem]] = None
     certifications: Optional[List[CertificationItem]] = None
+    achievements: Optional[List[AchievementItem]] = None
     links: Optional[List[LinkItem]] = None
 
 
@@ -107,6 +121,7 @@ class MasterProfileResponse(BaseModel):
     projects: List[Dict[str, Any]]
     education: List[Dict[str, Any]]
     certifications: List[Dict[str, Any]]
+    achievements: List[Dict[str, Any]] = Field(default_factory=list)
     links: List[Dict[str, Any]]
     original_filename: Optional[str]
     created_at: datetime

@@ -155,7 +155,7 @@ def test_resume_verifier_zero_hallucination():
 
 
 def test_field_schema_matches_frontend():
-    """Ensures API response keys match what the frontend reads"""
+    """Ensures API response keys match what the frontend reads across all 8 sections"""
     expected_frontend_keys = {
         "contact_info": ["full_name", "email", "phone", "location", "linkedin", "github", "portfolio"],
         "skills": ["languages", "frameworks", "databases", "tools", "cloud_devops", "soft_skills"],
@@ -163,6 +163,8 @@ def test_field_schema_matches_frontend():
         "experience": None,
         "projects": None,
         "education": None,
+        "certifications": None,
+        "achievements": None,
     }
     
     dummy_profile = MasterProfileData()
@@ -173,6 +175,89 @@ def test_field_schema_matches_frontend():
         if subkeys:
             for sub in subkeys:
                 assert sub in profile_dict[key], f"Missing subkey '{sub}' in '{key}'"
+
+
+def test_master_profile_update_all_sections():
+    """Verifies that MasterProfileUpdate parses projects, education, certifications, and achievements"""
+    from app.schemas.profile import MasterProfileUpdate, AchievementItem, CertificationItem
+    
+    payload = {
+        "contact_info": {
+            "full_name": "Test User",
+            "email": "test@user.com",
+            "phone": "+91 98765 43210",
+            "location": "Bengaluru, India"
+        },
+        "summary": "Full Stack Engineer",
+        "skills": {
+            "languages": ["Python", "JavaScript"],
+            "frameworks": ["FastAPI", "Next.js"],
+            "databases": ["PostgreSQL"],
+            "tools": ["Git"],
+            "cloud_devops": ["Docker"],
+            "soft_skills": []
+        },
+        "experience": [
+            {
+                "company": "Tech Corp",
+                "role": "SDE Intern",
+                "start_date": "2023",
+                "end_date": "2024",
+                "is_current": False,
+                "bullets": ["Built backend APIs"]
+            }
+        ],
+        "projects": [
+            {
+                "title": "Job Pilot",
+                "role": "Creator",
+                "description": "Autonomous AI job applicant",
+                "tech_stack": ["FastAPI", "React", "PostgreSQL"],
+                "bullets": ["Automated resume parsing"],
+                "github_url": "https://github.com/test/jobpilot",
+                "demo_url": "https://jobpilot.dev"
+            }
+        ],
+        "education": [
+            {
+                "institution": "State University",
+                "degree": "B.Tech",
+                "field_of_study": "Computer Science",
+                "start_year": "2020",
+                "end_year": "2024",
+                "grade_type": "CGPA",
+                "grade_value": "8.9",
+                "secondary_percentage": "94%"
+            }
+        ],
+        "certifications": [
+            {
+                "name": "AWS Certified Developer",
+                "issuer": "Amazon",
+                "date": "2023",
+                "url": "https://aws.amazon.com/verify/123"
+            }
+        ],
+        "achievements": [
+            {
+                "title": "1st Prize Hackathon",
+                "description": "Won best overall project",
+                "date": "2023",
+                "issuer": "MLH"
+            }
+        ]
+    }
+    
+    update_obj = MasterProfileUpdate(**payload)
+    dumped = update_obj.model_dump()
+    assert dumped["contact_info"]["phone"] == "+91 98765 43210"
+    assert len(dumped["projects"]) == 1
+    assert dumped["projects"][0]["github_url"] == "https://github.com/test/jobpilot"
+    assert len(dumped["education"]) == 1
+    assert dumped["education"][0]["grade_type"] == "CGPA"
+    assert len(dumped["certifications"]) == 1
+    assert len(dumped["achievements"]) == 1
+    assert dumped["achievements"][0]["title"] == "1st Prize Hackathon"
 
 
 @pytest.mark.asyncio
