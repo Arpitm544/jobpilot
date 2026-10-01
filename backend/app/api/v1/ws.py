@@ -49,7 +49,7 @@ async def websocket_endpoint(
                     await websocket.send_json({"type": "PONG"})
             except Exception:
                 pass
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         event_stream.disconnect_ws(websocket, user_id)
     except Exception as e:
         if "ClientDisconnected" in type(e).__name__ or "ConnectionClosed" in type(e).__name__:

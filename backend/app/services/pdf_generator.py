@@ -15,9 +15,11 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
   @page {
     size: letter;
-    margin: 0.4in 0.5in;
+    margin: 0.42in 0.52in;
   }
   * {
     box-sizing: border-box;
@@ -25,61 +27,73 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     padding: 0;
   }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #111827;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
     background: #ffffff;
-    font-size: 10pt;
-    line-height: 1.35;
+    font-size: 9.35pt;
+    line-height: 1.38;
+    -webkit-font-smoothing: antialiased;
   }
   .header {
     text-align: center;
-    border-bottom: 1.5px solid #1f2937;
-    padding-bottom: 6px;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 7px;
     margin-bottom: 10px;
   }
   .name {
-    font-size: 18pt;
-    font-weight: 700;
+    font-size: 20pt;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: -0.2px;
     color: #0f172a;
+    margin-bottom: 4px;
   }
   .contact-bar {
-    font-size: 9pt;
+    font-size: 9.1pt;
     color: #475569;
-    margin-top: 3px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
   }
-  .contact-bar span {
-    margin: 0 4px;
+  .contact-bar .sep {
+    color: #94a3b8;
+    font-weight: 400;
   }
   .contact-bar a {
-    color: #2563eb;
+    color: #0f172a;
     text-decoration: none;
+    font-weight: 500;
+    border-bottom: 1px dotted #94a3b8;
   }
   .section {
-    margin-bottom: 10px;
+    margin-bottom: 9px;
   }
   .section-title {
-    font-size: 10.5pt;
+    font-size: 10.2pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: #0f172a;
-    border-bottom: 1px solid #cbd5e1;
+    border-bottom: 1.5px solid #0f172a;
     padding-bottom: 2px;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
+    margin-top: 2px;
   }
   .summary-text {
-    font-size: 9.5pt;
+    font-size: 9.2pt;
     color: #334155;
+    line-height: 1.4;
     text-align: justify;
   }
   .skill-group {
-    font-size: 9.5pt;
+    font-size: 9.2pt;
+    line-height: 1.38;
     margin-bottom: 2px;
   }
   .skill-label {
-    font-weight: 600;
+    font-weight: 700;
     color: #0f172a;
   }
   .skill-items {
@@ -89,45 +103,116 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    font-size: 10pt;
     margin-top: 4px;
+    margin-bottom: 2px;
+  }
+  .item-title-group {
+    flex: 1;
+    min-width: 0;
   }
   .item-title {
     font-weight: 700;
+    font-size: 9.4pt;
     color: #0f172a;
   }
   .item-subtitle {
     font-weight: 600;
+    font-size: 9.2pt;
     color: #334155;
   }
-  .item-meta {
-    font-size: 9pt;
-    color: #64748b;
+  .item-tech {
+    font-size: 8.8pt;
+    color: #475569;
     font-style: italic;
+    margin-left: 4px;
+  }
+  .item-meta {
+    font-size: 8.8pt;
+    color: #64748b;
+    font-weight: 500;
+    flex-shrink: 0;
+    margin-left: 8px;
+  .item-links {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .live-link {
+    font-size: 8.2pt;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 1px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .demo-badge {
+    color: #0284c7;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+  }
+  .gh-badge {
+    color: #1e293b;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
   }
   ul.bullets {
     list-style-type: disc;
-    margin-left: 16px;
-    margin-top: 3px;
+    margin-left: 17px;
+    margin-top: 2px;
+    margin-bottom: 4px;
   }
   ul.bullets li {
-    font-size: 9.2pt;
-    color: #334155;
+    font-size: 9.05pt;
+    color: #1e293b;
     margin-bottom: 2px;
-    line-height: 1.3;
+    line-height: 1.35;
+  }
+
+  /* Spacious layout when item count is light, preventing awkward bottom voids */
+  body.spacious .section {
+    margin-bottom: 15px;
+  }
+  body.spacious .section-title {
+    margin-bottom: 8px;
+    margin-top: 6px;
+  }
+  body.spacious .item-header {
+    margin-top: 9px;
+    margin-bottom: 4px;
+  }
+  body.spacious ul.bullets {
+    margin-bottom: 8px;
+  }
+  body.spacious ul.bullets li {
+    font-size: 9.25pt;
+    line-height: 1.44;
+    margin-bottom: 4px;
+  }
+  body.spacious .summary-text {
+    font-size: 9.35pt;
+    line-height: 1.48;
+  }
+  body.spacious .skill-group {
+    margin-bottom: 3.5px;
+    line-height: 1.44;
   }
 </style>
 </head>
-<body>
+{% set total_items = (experience|length if experience else 0) + (projects|length if projects else 0) %}
+<body class="{% if total_items <= 3 %}spacious{% endif %}">
   <!-- Header -->
   <div class="header">
     <div class="name">{{ contact.full_name or 'Software Engineer' }}</div>
     <div class="contact-bar">
-      {% if contact.location %}{{ contact.location }}{% endif %}
-      {% if contact.email %}<span>•</span>{{ contact.email }}{% endif %}
-      {% if contact.phone %}<span>•</span>{{ contact.phone }}{% endif %}
-      {% if contact.linkedin %}<span>•</span><a href="{{ contact.linkedin }}">LinkedIn</a>{% endif %}
-      {% if contact.github %}<span>•</span><a href="{{ contact.github }}">GitHub</a>{% endif %}
+      {% if contact.location %}<span>{{ contact.location }}</span>{% endif %}
+      {% if contact.email %}<span class="sep">•</span><a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% endif %}
+      {% if contact.phone %}<span class="sep">•</span><span>{{ contact.phone }}</span>{% endif %}
+      {% if contact.linkedin %}<span class="sep">•</span><a href="{{ contact.linkedin }}" target="_blank">LinkedIn</a>{% endif %}
+      {% if contact.github %}<span class="sep">•</span><a href="{{ contact.github }}" target="_blank">GitHub</a>{% endif %}
+      {% if contact.portfolio %}<span class="sep">•</span><a href="{{ contact.portfolio }}" target="_blank">Portfolio</a>{% endif %}
     </div>
   </div>
 
@@ -146,7 +231,7 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for category, items in skills.items() %}
       {% if items and items|length > 0 %}
       <div class="skill-group">
-        <span class="skill-label">{{ category.replace('_', ' ').title() }}:</span>
+        <span class="skill-label">{% if category == 'soft_skills' %}Architecture & Core Concepts{% elif category == 'cloud_devops' %}Cloud & DevOps{% else %}{{ category.replace('_', ' ').title() }}{% endif %}:</span>
         <span class="skill-items">{{ items|join(', ') }}</span>
       </div>
       {% endif %}
@@ -160,11 +245,11 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="section-title">Experience</div>
     {% for exp in experience %}
     <div class="item-header">
-      <div>
-        <span class="item-title">{{ exp.role }}</span> — 
-        <span class="item-subtitle">{{ exp.company }}</span>
+      <div class="item-title-group">
+        <span class="item-title">{{ exp.role }}</span>
+        <span class="item-subtitle">— {{ exp.company }}</span>
       </div>
-      <div class="item-meta">{{ exp.start_date }} – {{ exp.end_date }} | {{ exp.location or 'Remote' }}</div>
+      <div class="item-meta">{{ exp.start_date }} – {{ exp.end_date }}{% if exp.location %} | {{ exp.location }}{% endif %}</div>
     </div>
     {% if exp.bullets and exp.bullets|length > 0 %}
     <ul class="bullets">
@@ -185,15 +270,26 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="section-title">Key Projects</div>
     {% for proj in projects %}
     <div class="item-header">
-      <div>
+      <div class="item-title-group">
         <span class="item-title">{{ proj.title }}</span>
         {% if proj.tech_stack %}
-        <span class="item-meta">({{ proj.tech_stack|join(', ') }})</span>
+        <span class="item-tech">({{ proj.tech_stack|join(', ') }})</span>
         {% endif %}
       </div>
-      {% if proj.link %}
-      <div class="item-meta">{{ proj.link }}</div>
-      {% endif %}
+      <div class="item-links">
+        {% set gh_link = proj.github_url or (proj.links.github_repo if proj.links and proj.links is mapping else None) %}
+        {% set demo_link = proj.demo_url or (proj.links.live_demo if proj.links and proj.links is mapping else None) or (proj.link if proj.link and 'github' not in proj.link.lower() else None) %}
+        {% if not gh_link and proj.link and 'github' in proj.link.lower() %}
+          {% set gh_link = proj.link %}
+        {% endif %}
+
+        {% if gh_link %}
+        <a href="{{ gh_link }}" target="_blank" class="live-link gh-badge">GitHub ↗</a>
+        {% endif %}
+        {% if demo_link and demo_link != gh_link %}
+        <a href="{{ demo_link }}" target="_blank" class="live-link demo-badge">Live Demo ↗</a>
+        {% endif %}
+      </div>
     </div>
     {% if proj.bullets and proj.bullets|length > 0 %}
     <ul class="bullets">
@@ -214,9 +310,9 @@ ATS_RESUME_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="section-title">Education</div>
     {% for edu in education %}
     <div class="item-header">
-      <div>
-        <span class="item-title">{{ edu.institution }}</span> — 
-        <span class="item-subtitle">{{ edu.degree }}{% if edu.field_of_study %} in {{ edu.field_of_study }}{% endif %}</span>
+      <div class="item-title-group">
+        <span class="item-title">{{ edu.institution }}</span>
+        <span class="item-subtitle">— {{ edu.degree }}{% if edu.field_of_study %} in {{ edu.field_of_study }}{% endif %}</span>
       </div>
       <div class="item-meta">
         {{ edu.start_year }} – {{ edu.end_year }}{% if edu.gpa %} | GPA: {{ edu.gpa }}{% endif %}
@@ -280,24 +376,30 @@ class PDFGeneratorService:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # Try Playwright for pixel-perfect PDF rendering with strict timeout
+        # Try Playwright for pixel-perfect PDF rendering with strict timeout.
+        # Note: We use sync_playwright inside asyncio.to_thread to ensure Windows compatibility
+        # when Uvicorn is running with SelectorEventLoop (which does not support async subprocesses).
         try:
-            async def _render():
-                from playwright.async_api import async_playwright
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True)
-                    page = await browser.new_page()
-                    await page.set_content(html_content, wait_until="domcontentloaded", timeout=6000)
-                    await page.pdf(
-                        path=pdf_path,
+            def _render_sync(html: str, target_pdf_path: str):
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+                    # Wait for networkidle to ensure web fonts (Inter) load fully
+                    try:
+                        page.set_content(html, wait_until="networkidle", timeout=8000)
+                    except Exception:
+                        page.set_content(html, wait_until="load", timeout=8000)
+                    page.pdf(
+                        path=target_pdf_path,
                         format="Letter",
                         print_background=True,
-                        margin={"top": "0.4in", "bottom": "0.4in", "left": "0.5in", "right": "0.5in"}
+                        prefer_css_page_size=True,
+                        margin={"top": "0in", "bottom": "0in", "left": "0in", "right": "0in"}
                     )
-                    await browser.close()
-                return pdf_path
+                    browser.close()
 
-            await asyncio.wait_for(_render(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(_render_sync, html_content, pdf_path), timeout=20.0)
             logger.info(f"Playwright generated PDF successfully: {pdf_path}")
             return pdf_path
         except Exception as e:

@@ -155,7 +155,15 @@ export default function TailorModal({ isOpen, onClose, jobMatch, onTailorComplet
 
               <div className="flex items-center gap-2">
                 <a
-                  href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}${tailoredData.pdf_download_url}`}
+                  href={
+                    !tailoredData.pdf_download_url
+                      ? '#'
+                      : tailoredData.pdf_download_url.startsWith('http')
+                        ? tailoredData.pdf_download_url
+                        : tailoredData.pdf_download_url.startsWith('/api/v1')
+                          ? tailoredData.pdf_download_url
+                          : `${(process.env.NEXT_PUBLIC_API_URL || '/api/v1').replace(/\/+$/, '')}/${tailoredData.pdf_download_url.replace(/^\/+/, '')}`
+                  }
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"

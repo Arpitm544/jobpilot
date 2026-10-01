@@ -29,10 +29,14 @@ class GeminiService:
         self.embedding_model = settings.GEMINI_EMBEDDING_MODEL or "text-embedding-004"
         self.fallback_models = [
             self.model,
-            "gemini-flash-latest",
-            "gemini-2.5-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
             "gemini-3.1-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
         ]
+        self._model_cooldowns: dict[str, float] = {}
         self.client = _genai_client
         if not self.client and self.api_key:
             try:
@@ -43,6 +47,28 @@ class GeminiService:
 
     def is_available(self) -> bool:
         return self.client is not None and bool(self.api_key)
+
+    def get_candidate_models(self) -> List[str]:
+        """Returns models ordered by availability, prioritizing those not in quota cooldown."""
+        import time
+        now = time.time()
+        # Clean expired cooldowns
+        self._model_cooldowns = {m: exp for m, exp in self._model_cooldowns.items() if exp > now}
+
+        unique_models = []
+        for m in self.fallback_models:
+            if m and m not in unique_models:
+                unique_models.append(m)
+
+        available = [m for m in unique_models if m not in self._model_cooldowns]
+        cooling = [m for m in unique_models if m in self._model_cooldowns]
+        return available + cooling if available else unique_models
+
+    def mark_quota_exhausted(self, model_name: str, cooldown_seconds: float = 60.0):
+        """Places a model in cooldown so subsequent requests don't waste time retrying it."""
+        import time
+        self._model_cooldowns[model_name] = time.time() + cooldown_seconds
+        logger.warning(f"Marking model '{model_name}' as quota-exhausted for {cooldown_seconds:.0f}s cooldown.")
 
     @staticmethod
     def clean_json_text(raw_text: str) -> str:
@@ -77,12 +103,7 @@ class GeminiService:
 
         from google.genai import types
 
-        # Dedup fallback models while preserving order
-        models_to_try = []
-        for m in self.fallback_models:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
-
+        models_to_try = self.get_candidate_models()
         last_error = None
 
         for model_name in models_to_try:
@@ -162,13 +183,24 @@ class GeminiService:
                 except Exception as e:
                     last_error = e
                     err_msg = str(e)
-                    is_transient = "503" in err_msg or "429" in err_msg or "UNAVAILABLE" in err_msg or "ResourceExhausted" in err_msg
+                    is_quota_exhausted = (
+                        "429" in err_msg or
+                        "RESOURCE_EXHAUSTED" in err_msg or
+                        "quota" in err_msg.lower() or
+                        "rate limit" in err_msg.lower()
+                    )
                     is_not_found = "404" in err_msg or "NOT_FOUND" in err_msg
                     
                     if is_not_found:
                         logger.warning(f"Model '{model_name}' not found or deprecated: {e}. Moving to next fallback model.")
                         break  # move to next model immediately
 
+                    if is_quota_exhausted:
+                        self.mark_quota_exhausted(model_name, cooldown_seconds=60.0)
+                        logger.warning(f"Quota exhausted on model '{model_name}'. Switching immediately to next fallback model without retrying.")
+                        break  # Immediately advance to next fallback model
+
+                    is_transient = "503" in err_msg or "UNAVAILABLE" in err_msg or "500" in err_msg
                     if is_transient and attempt < max_retries_per_model - 1:
                         backoff = (2 ** attempt) * 1.5
                         logger.warning(f"Transient error on model '{model_name}': {e}. Retrying in {backoff:.1f}s...")
@@ -228,7 +260,41 @@ class GeminiService:
                 return list(result.embeddings[0].values)
         except Exception as e:
             logger.error(f"Gemini embedding generation failed: {e}")
-        return [0.0] * 768
+    async def generate_text(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None
+    ) -> Optional[str]:
+        """Generate freeform text using Gemini with model fallback and error handling."""
+        if not self.is_available():
+            return None
+
+        from google.genai import types
+
+        models_to_try = self.get_candidate_models()
+
+        for model_name in models_to_try:
+            try:
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.3,
+                    max_output_tokens=2048,
+                )
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=model_name,
+                    contents=prompt,
+                    config=config,
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
+                    self.mark_quota_exhausted(model_name, cooldown_seconds=60.0)
+                logger.warning(f"generate_text failed with {model_name}: {e}")
+                continue
+        return None
 
 
 gemini_service = GeminiService()

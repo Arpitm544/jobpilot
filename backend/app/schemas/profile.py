@@ -12,6 +12,10 @@ class ContactInfo(BaseModel):
     linkedin: Optional[str] = None
     github: Optional[str] = None
     portfolio: Optional[str] = None
+    leetcode: Optional[str] = None
+    codeforces: Optional[str] = None
+
+    model_config = {"extra": "allow"}
 
 
 class SkillCategories(BaseModel):
@@ -20,7 +24,10 @@ class SkillCategories(BaseModel):
     databases: List[str] = Field(default_factory=list)
     tools: List[str] = Field(default_factory=list)
     cloud_devops: List[str] = Field(default_factory=list)
+    concepts: List[str] = Field(default_factory=list)
     soft_skills: List[str] = Field(default_factory=list)
+
+    model_config = {"extra": "allow"}
 
 
 class ExperienceItem(BaseModel):

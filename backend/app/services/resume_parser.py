@@ -625,6 +625,113 @@ def associate_project_links(
     return projects
 
 
+SKILL_ALIASES = {
+    "reactjs": "React",
+    "react.js": "React",
+    "react js": "React",
+    "nodejs": "Node.js",
+    "node.js": "Node.js",
+    "node js": "Node.js",
+    "node": "Node.js",
+    "nextjs": "Next.js",
+    "next.js": "Next.js",
+    "next js": "Next.js",
+    "vuejs": "Vue.js",
+    "vue.js": "Vue.js",
+    "vue js": "Vue.js",
+    "postgres": "PostgreSQL",
+    "postgresql": "PostgreSQL",
+    "mongo": "MongoDB",
+    "mongodb": "MongoDB",
+    "ts": "TypeScript",
+    "typescript": "TypeScript",
+    "js": "JavaScript",
+    "javascript": "JavaScript",
+    "py": "Python",
+    "python": "Python",
+    "golang": "Go",
+    "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
+    "fastapi": "FastAPI",
+    "restful apis": "REST APIs",
+    "rest api": "REST APIs",
+    "rest apis": "REST APIs",
+    "rest": "REST APIs",
+    "sse": "Server-Sent Events (SSE)",
+    "jwt": "JWT",
+    "jwts": "JWT",
+    "websockets": "WebSockets",
+    "system design": "System Design",
+    "dsa": "Data Structures & Algorithms (DSA)",
+    "oops": "Object-Oriented Programming (OOPs)",
+    "oop": "Object-Oriented Programming (OOPs)",
+    "dbms": "DBMS",
+    "os": "Operating Systems",
+    "distributed systems": "Distributed Systems",
+    "microservices": "Microservices",
+    "ci/cd": "CI/CD",
+}
+
+CONCEPT_KEYWORDS = {
+    "rest", "rest api", "rest apis", "restful", "restful apis", "sse", "server-sent events",
+    "server-sent events (sse)", "jwt", "jwts", "websocket", "websockets", "system design",
+    "dsa", "data structures", "algorithms", "data structures & algorithms",
+    "data structures & algorithms (dsa)", "oops", "oop", "object-oriented programming",
+    "object-oriented programming (oops)", "dbms", "os", "operating systems",
+    "distributed systems", "microservices", "concurrency", "multithreading", "design patterns",
+    "graphql", "mvc", "event-driven architecture"
+}
+
+
+def clean_skill_categories(skills: SkillCategories) -> SkillCategories:
+    def normalize_list(items: List[str]) -> List[str]:
+        out = []
+        seen = set()
+        for it in items or []:
+            if not it or not str(it).strip():
+                continue
+            cleaned = str(it).strip()
+            canonical = SKILL_ALIASES.get(cleaned.lower(), cleaned)
+            if canonical.lower() not in seen:
+                seen.add(canonical.lower())
+                out.append(canonical)
+        return out
+
+    languages = normalize_list(skills.languages)
+    frameworks = normalize_list(skills.frameworks)
+    databases = normalize_list(skills.databases)
+    tools = normalize_list(skills.tools)
+    cloud_devops = normalize_list(skills.cloud_devops)
+    concepts = normalize_list(getattr(skills, "concepts", []))
+    soft_skills = normalize_list(skills.soft_skills)
+
+    for cat_list in [cloud_devops, soft_skills, tools, frameworks]:
+        to_move = [s for s in list(cat_list) if s.lower() in CONCEPT_KEYWORDS]
+        for s in to_move:
+            cat_list.remove(s)
+            if s.lower() not in {c.lower() for c in concepts}:
+                concepts.append(s)
+
+    tools_set = {s.lower() for s in tools}
+    cloud_devops = [s for s in cloud_devops if s.lower() not in tools_set]
+
+    clean_soft = []
+    for s in soft_skills:
+        if s.lower() not in CONCEPT_KEYWORDS and s.lower() not in tools_set:
+            clean_soft.append(s)
+    soft_skills = clean_soft
+
+    return SkillCategories(
+        languages=languages,
+        frameworks=frameworks,
+        databases=databases,
+        tools=tools,
+        cloud_devops=cloud_devops,
+        concepts=concepts,
+        soft_skills=soft_skills,
+    )
+
+
 class ResumeParserService:
     @staticmethod
     async def parse_resume_file(
@@ -662,7 +769,10 @@ class ResumeParserService:
             "1. Do NOT invent or hallucinate any degrees, employers, skills, or URLs.\n"
             "2. Extract contact information accurately (full_name, email, phone, location, linkedin, github, portfolio).\n"
             "   Check the embedded hyperlinks section for LinkedIn, GitHub, portfolio, and project links.\n"
-            "3. Categorize technical skills into: languages, frameworks, databases, tools, cloud_devops, soft_skills.\n"
+            "3. Categorize technical skills into: languages, frameworks, databases, tools, cloud_devops, concepts, soft_skills.\n"
+            "   IMPORTANT: REST, SSE, JWT, WebSockets, System Design, DSA, OOPs, DBMS, OS belong in concepts (NOT cloud_devops or soft_skills).\n"
+            "   Docker, Git, Vercel, Render belong in tools or cloud_devops (do NOT duplicate).\n"
+            "   soft_skills must ONLY contain real interpersonal skills (e.g. Leadership, Communication, Teamwork).\n"
             "4. Extract all experience items with company, role, dates, location, bullets.\n"
             "5. Extract all projects with:\n"
             "   - title: Project name\n"
@@ -692,6 +802,10 @@ class ResumeParserService:
             logger.info("Gemini parsing returned None. Falling back to heuristic rule-based resume parser.")
             profile_data = heuristic_profile_extractor(raw_text, extracted_links, filename)
             parsing_mode = "heuristic_fallback"
+
+        # Apply skill categorization and alias hygiene
+        if profile_data and profile_data.skills:
+            profile_data.skills = clean_skill_categories(profile_data.skills)
 
         # Deterministic project link association fallback & domain classification
         if profile_data and profile_data.projects:

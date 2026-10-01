@@ -125,20 +125,58 @@ async def trigger_discovery(
         preferences=prefs
     )
 
-    # 4. Score all discovered jobs
+    # 4. Score top discovered jobs efficiently
+    import asyncio
+    profile_skills = scoring_service.extract_profile_skill_pool(profile)
+    profile_text = f"{profile.summary or ''} Skills: {', '.join(profile_skills)}"
+    try:
+        from app.services.gemini_service import gemini_service
+        vec_profile = await asyncio.wait_for(gemini_service.get_embedding(profile_text), timeout=2.5)
+    except Exception:
+        vec_profile = [0.0] * 768
+
+    top_jobs = jobs[:10]
+    async def _embed_job(j):
+        req = (j.jd_parsed_skills or {}).get("required_skills") or []
+        summary = f"{j.title} at {j.company_name}. Required: {', '.join(req)}. {j.jd_text[:1000]}"
+        try:
+            return await asyncio.wait_for(gemini_service.get_embedding(summary), timeout=2.5)
+        except Exception:
+            return [0.0] * 768
+
+    jd_vecs = await asyncio.gather(*[_embed_job(j) for j in top_jobs], return_exceptions=True)
+
+    # Batch query existing matches for top jobs in a single roundtrip
+    top_job_ids = [j.id for j in top_jobs]
+    existing_matches_map = {}
+    if top_job_ids:
+        match_query = await db.execute(
+            select(JobMatch).where(
+                JobMatch.user_id == current_user.id,
+                JobMatch.job_id.in_(top_job_ids)
+            )
+        )
+        existing_matches_map = {m.job_id: m for m in match_query.scalars().all()}
+
     matches: List[JobMatch] = []
-    for job in jobs[:25]:  # Batch score top discovered jobs
+    for idx, job in enumerate(top_jobs):
+        vec_jd = jd_vecs[idx] if idx < len(jd_vecs) and isinstance(jd_vecs[idx], list) else None
         match = await scoring_service.calculate_match(
             db=db,
             user_id=current_user.id,
             job=job,
             profile=profile,
-            preferences=prefs
+            preferences=prefs,
+            cached_profile_vec=vec_profile,
+            cached_jd_vec=vec_jd,
+            existing_match=existing_matches_map.get(job.id),
+            use_ai_parse=False,
+            auto_commit=False
         )
-        # Load job relationship for response serialization
         match.job = job
         matches.append(match)
 
+    await db.commit()
     # Sort matches by score descending
     matches.sort(key=lambda m: m.match_score, reverse=True)
     return matches

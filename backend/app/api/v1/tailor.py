@@ -1,11 +1,15 @@
 import os
 import uuid
+import logging
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models.user import User
@@ -142,11 +146,42 @@ async def download_tailored_pdf(
         .where(TailoredResume.id == tailored_id, JobMatch.user_id == current_user.id)
     )
     tailored = result.scalar_one_or_none()
-    if not tailored or not tailored.pdf_storage_path or not os.path.exists(tailored.pdf_storage_path):
+    if not tailored or not tailored.pdf_storage_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found.")
+
+    pdf_path = tailored.pdf_storage_path
+    html_path = pdf_path.replace(".pdf", ".html") if pdf_path.endswith(".pdf") else f"{pdf_path}.html"
+
+    # Self-healing: if PDF is missing or is an old dummy placeholder (<1KB), and HTML exists, re-render it cleanly
+    if os.path.exists(html_path) and (not os.path.exists(pdf_path) or os.path.getsize(pdf_path) < 1000):
+        try:
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+
+            def _render_sync(html: str, target: str):
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    b = p.chromium.launch(headless=True)
+                    pg = b.new_page()
+                    pg.set_content(html, wait_until="domcontentloaded", timeout=10000)
+                    pg.pdf(
+                        path=target,
+                        format="Letter",
+                        print_background=True,
+                        margin={"top": "0.4in", "bottom": "0.4in", "left": "0.5in", "right": "0.5in"}
+                    )
+                    b.close()
+
+            await asyncio.wait_for(asyncio.to_thread(_render_sync, html_content, pdf_path), timeout=20.0)
+            logger.info(f"Self-healed and re-rendered PDF: {pdf_path}")
+        except Exception as e:
+            logger.warning(f"Could not re-render PDF from HTML: {e}")
+
+    if not os.path.exists(pdf_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found.")
 
     return FileResponse(
-        path=tailored.pdf_storage_path,
+        path=pdf_path,
         media_type="application/pdf",
         filename=f"tailored_resume_{tailored_id}.pdf"
     )

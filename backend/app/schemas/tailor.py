@@ -32,6 +32,8 @@ class TailoredProjectItem(BaseModel):
     tech_stack: List[str] = Field(default_factory=list)
     bullets: List[str] = Field(default_factory=list)
     link: Optional[str] = None
+    github_url: Optional[str] = None
+    demo_url: Optional[str] = None
 
 
 class TailoredProfilePayload(BaseModel):

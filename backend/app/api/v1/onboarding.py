@@ -99,14 +99,14 @@ async def get_onboarding_state(
             "download_url": f"/api/v1/resumes/{latest_resume.id}/download",
         }
 
-    # Determine has_active_profile
+    # Determine has_active_profile (requires actual resume content: skills, projects, experience, education, or summary)
     has_active_profile = bool(
         profile and (
-            bool(profile.summary) or
+            (bool(profile.summary) and len(profile.summary.strip()) > 20) or
             skills_count > 0 or
             projects_count > 0 or
             exp_count > 0 or
-            bool(profile.contact_info and (profile.contact_info.get("full_name") or profile.contact_info.get("phone")))
+            edu_count > 0
         )
     )
 
@@ -131,23 +131,14 @@ async def get_onboarding_state(
     )
     question_bank_saved = bool(
         question_bank and (
-            bool(question_bank.work_authorization) or
-            bool(question_bank.notice_period) or
-            bool(question_bank.expected_ctc)
+            bool(question_bank.expected_ctc) or
+            bool(question_bank.current_ctc) or
+            bool(question_bank.portfolio_url)
         )
     )
 
-    # Server-persisted last_completed_step
+    # Server-persisted last_completed_step is the single source of truth
     last_step = current_user.last_completed_step or 0
-    # Infer higher step if records exist
-    if question_bank_saved:
-        last_step = max(last_step, 4)
-    elif preferences_saved:
-        last_step = max(last_step, 3)
-    elif has_active_profile:
-        last_step = max(last_step, 2)
-    elif has_resume:
-        last_step = max(last_step, 1)
 
     return {
         "has_resume": has_resume,

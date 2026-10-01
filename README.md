@@ -110,3 +110,39 @@ Visit `http://localhost:3000`.
 - [x] **Phase 5: Full Apply Engine + Celery Worker Fleet + Live Telemetry WebSockets + Kill Switch**
 - [x] **Phase 6: Inbound Email Tracking & Sync + Analytics Dashboard + AI Follow-Up Generator + Manifest V3 Chrome Extension**
 - [x] **Phase 7: End-to-End Pipeline Verification & Full Smoke Testing (All 9/9 stages verified)**
+
+---
+
+## 🧪 Automated Testing & E2E Test Suite
+
+JobPilot includes a comprehensive end-to-end browser test suite powered by **Playwright** that exercises all 7 critical user flows across real browser automation, correlating UI state with backend API logs, network requests, and database persistence.
+
+### Prerequisites
+1. Ensure FastAPI backend is running on `http://127.0.0.1:8000`
+2. Ensure Next.js frontend is running on `http://localhost:3000`
+3. Ensure PostgreSQL (Neon) and Redis are reachable
+
+### Run Backend Pytest Suite
+```bash
+# Run all unit, integration, and regression tests
+cd backend
+python -m pytest tests/ -v
+```
+
+### Run Playwright Browser E2E Test Suite
+```bash
+# From the repository root
+python tests/test_e2e_browser_flows.py
+```
+
+### What the E2E Suite Tests:
+- **Flow 1**: Landing page hero, anchors, sticky navbar, and CTA navigation.
+- **Flow 2**: Route protection, unauthenticated redirects, registration, 7-day HttpOnly cookie lifecycle, and reload persistence.
+- **Flow 3**: Step 1 Resume uploads across 6 format variants (`.exe` rejection, >5MB oversized rejection, corrupt fake PDF server signature validation, `.docx` extraction, scanned image PDF OCR/layout parsing, valid text PDF parsing with full stage transitions `queued -> extracting -> analyzing -> validating -> ready`).
+- **Flow 4**: Step 2 Master profile review, zero `null` rendering, editing fields, adding/removing skills, and database persistence.
+- **Flow 5**: Step 3 & 4 Preferences and Common Questions (India template with notice period and CTC), completion, pipeline redirection, and state persistence on revisit to `/onboarding`.
+- **Flow 6**: Clean loading and correct empty states across all core dashboard pages (`/pipeline`, `/discovery`, `/analytics`, `/profile`, `/dashboard/*`).
+- **Flow 7**: Edge cases including rapid button double-clicks, multi-tab session synchronization via `BroadcastChannel`, and secure sign-out.
+
+All test screenshots and JSON test telemetry logs are saved to `logs/screenshots/` and `logs/phase1_browser_results.json`.
+
