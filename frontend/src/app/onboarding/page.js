@@ -390,12 +390,16 @@ export default function OnboardingPage() {
 
   // Step 4: Question Bank State
   const [questions, setQuestions] = useState({
+    home_country: 'IN',
+    home_city: '',
+    citizenship: 'IN',
     work_authorization: 'Authorized to work without sponsorship',
     needs_sponsorship: false,
     notice_period: 'Immediate (0-15 days)',
     expected_ctc: '$90,000 / year (or INR 15-20 LPA)',
     current_ctc: '$75,000 / year',
     willing_to_relocate: true,
+    open_to_international: false,
     earliest_start_date: 'Immediately',
     portfolio_url: '',
     linkedin_url: '',
@@ -704,7 +708,17 @@ export default function OnboardingPage() {
     setError('');
     setSaveLoading(true);
     try {
-      await api.put('/profile/question-bank', questions);
+      await Promise.allSettled([
+        api.put('/profile/question-bank', questions),
+        api.put('/settings/location', {
+          home_country: questions.home_country || 'IN',
+          home_city: questions.home_city || '',
+          citizenship: questions.citizenship || 'IN',
+          needs_visa_sponsorship: Boolean(questions.needs_sponsorship),
+          willing_to_relocate: Boolean(questions.willing_to_relocate),
+          open_to_international: Boolean(questions.open_to_international),
+        })
+      ]);
       await api.put('/onboarding/step', { step: 4 });
       await fetchOnboardingState();
       setSuccessMsg('Onboarding complete! Your profile is automated.');
@@ -1330,55 +1344,7 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            {/* 2. Experience Level & Workplace Type */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-white/10">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Seniority / Level
-                </label>
-                <select
-                  value={preferences.experience_level}
-                  onChange={(e) => setPreferences({ ...preferences, experience_level: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="Intern">Internship</option>
-                  <option value="Fresher">Fresher / Graduate</option>
-                  <option value="Junior">Junior (1-3 yrs)</option>
-                  <option value="Mid">Mid-Level (3-5 yrs)</option>
-                  <option value="Senior">Senior (5+ yrs)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Workplace Type
-                </label>
-                <select
-                  value={preferences.workplace_type}
-                  onChange={(e) => setPreferences({ ...preferences, workplace_type: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="Remote">Remote Only</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="Onsite">Onsite</option>
-                  <option value="Any">Any / Flexible</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Minimum Salary / Stipend (USD / yr)
-                </label>
-                <input
-                  type="number"
-                  value={preferences.min_salary}
-                  onChange={(e) => setPreferences({ ...preferences, min_salary: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            {/* 3. Apply Mode Selector */}
+            {/* 2. Apply Mode Selector */}
             <div className="pt-4 border-t border-white/10">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">
                 Automation Apply Mode
@@ -1468,6 +1434,49 @@ export default function OnboardingPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
+                <label className="text-xs font-semibold text-slate-300">Home Country (Drives Job Ranking & Local Currency)</label>
+                <select
+                  value={questions.home_country || 'IN'}
+                  onChange={(e) => setQuestions({ ...questions, home_country: e.target.value })}
+                  className="w-full mt-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs"
+                >
+                  <option value="IN">India (IN) - ₹ / INR</option>
+                  <option value="US">United States (US) - $ / USD</option>
+                  <option value="GB">United Kingdom (GB) - £ / GBP</option>
+                  <option value="DE">Germany (DE) - € / EUR</option>
+                  <option value="CA">Canada (CA) - C$ / CAD</option>
+                  <option value="SG">Singapore (SG) - S$ / SGD</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300">Citizenship / Passport Country</label>
+                <select
+                  value={questions.citizenship || 'IN'}
+                  onChange={(e) => setQuestions({ ...questions, citizenship: e.target.value })}
+                  className="w-full mt-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs"
+                >
+                  <option value="IN">India (IN)</option>
+                  <option value="US">United States (US)</option>
+                  <option value="GB">United Kingdom (GB)</option>
+                  <option value="DE">Germany (DE)</option>
+                  <option value="CA">Canada (CA)</option>
+                  <option value="SG">Singapore (SG)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300">Home City</label>
+                <input
+                  type="text"
+                  value={questions.home_city || ''}
+                  onChange={(e) => setQuestions({ ...questions, home_city: e.target.value })}
+                  placeholder="e.g. Bengaluru, Berlin, London..."
+                  className="w-full mt-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs"
+                />
+              </div>
+
+              <div>
                 <label className="text-xs font-semibold text-slate-300">Work Authorization Status</label>
                 <input
                   type="text"
@@ -1522,7 +1531,7 @@ export default function OnboardingPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-6 pt-5">
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-6 pt-3 border-t border-white/5">
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                   <input
                     type="checkbox"
@@ -1540,6 +1549,15 @@ export default function OnboardingPage() {
                     className="rounded bg-slate-900 border-white/10 text-indigo-500"
                   />
                   <span>Requires visa sponsorship</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={questions.open_to_international}
+                    onChange={(e) => setQuestions({ ...questions, open_to_international: e.target.checked })}
+                    className="rounded bg-slate-900 border-white/10 text-indigo-500"
+                  />
+                  <span>Open to international remote roles</span>
                 </label>
               </div>
             </div>

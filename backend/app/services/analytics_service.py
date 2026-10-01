@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 from sqlalchemy import select, func, desc
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, noload
 from sqlalchemy.ext.asyncio import AsyncSession
 from google import genai
 
@@ -41,9 +41,11 @@ class AnalyticsService:
         )
         applications = app_res.scalars().all()
 
-        # Matches count
+        # Matches count — eagerly load tailored_resume to avoid lazy-load in async context
         match_res = await db.execute(
-            select(JobMatch).where(JobMatch.user_id == user_id)
+            select(JobMatch)
+            .options(selectinload(JobMatch.tailored_resume))
+            .where(JobMatch.user_id == user_id)
         )
         matches = match_res.scalars().all()
 

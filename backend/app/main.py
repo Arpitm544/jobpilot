@@ -19,6 +19,8 @@ from app.api.v1.analytics import router as analytics_router
 from app.api.v1.resumes import router as resumes_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.ws import router as ws_router
+from app.api.v1.settings import router as settings_router
+from app.api.v1.countries import router as countries_router
 
 # Configure file and stream logging
 LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
@@ -146,6 +148,10 @@ app.include_router(resumes_router)  # Allow direct /resumes/* endpoints as well
 app.include_router(onboarding_router, prefix=settings.API_V1_STR)
 app.include_router(onboarding_router)  # Allow direct /onboarding/* endpoints as well
 app.include_router(ws_router, prefix=settings.API_V1_STR)
+app.include_router(settings_router, prefix=settings.API_V1_STR)
+app.include_router(settings_router)  # Direct /settings/* endpoints
+app.include_router(countries_router, prefix=settings.API_V1_STR)
+app.include_router(countries_router)  # Direct /countries/* endpoints
 
 
 @app.get("/health", tags=["Health"])

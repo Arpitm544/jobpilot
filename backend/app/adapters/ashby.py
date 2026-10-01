@@ -38,7 +38,7 @@ class AshbyAdapter(BaseATSAdapter):
         normalized_jobs: List[Dict[str, Any]] = []
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 res = await client.get(url)
                 if res.status_code == 404:
                     logger.warning(f"Ashby board '{company_identifier}' not found.")
@@ -86,9 +86,20 @@ class AshbyAdapter(BaseATSAdapter):
                 if min_v and max_v:
                     salary_range = f"{curr} {min_v:,} - {max_v:,}"
 
+            COMPANY_DISPLAY_NAMES = {
+                "ramp": "Ramp",
+                "linear": "Linear",
+                "supabase": "Supabase",
+                "sentry": "Sentry",
+            }
+            company_display = COMPANY_DISPLAY_NAMES.get(
+                company_identifier.lower().strip(),
+                company_identifier.replace("-", " ").title()
+            )
+
             normalized_jobs.append({
                 "external_id": job_id,
-                "company_name": company_identifier.replace("-", " ").title(),
+                "company_name": company_display,
                 "title": title,
                 "location": location_str,
                 "workplace_type": workplace_type,

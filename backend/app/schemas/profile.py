@@ -194,6 +194,13 @@ class ResumeParseResponse(BaseModel):
 
 
 class QuestionBankData(BaseModel):
+    home_country: Optional[str] = "IN"
+    home_city: Optional[str] = None
+    preferred_cities: List[str] = Field(default_factory=list)
+    citizenship: Optional[str] = None
+    work_authorization_countries: List[str] = Field(default_factory=list)
+    open_to_international: bool = False
+
     work_authorization: Optional[str] = "Authorized to work in country"
     needs_sponsorship: bool = False
     notice_period: Optional[str] = "Immediate"

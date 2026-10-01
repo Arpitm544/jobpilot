@@ -1,0 +1,118 @@
+{
+  "code": "US",
+  "name": "United States",
+  "currency": {
+    "code": "USD",
+    "symbol": "$",
+    "salary_unit_annual": "USD/year",
+    "salary_unit_stipend": "per hour",
+    "stipend_period_default": "hourly"
+  },
+  "cities": [
+    "San Francisco",
+    "New York",
+    "Seattle",
+    "Austin",
+    "Boston",
+    "Los Angeles",
+    "Chicago",
+    "Denver",
+    "Atlanta",
+    "San Jose",
+    "Sunnyvale",
+    "San Diego"
+  ],
+  "timezones": [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles"
+  ],
+  "phone_prefix": "+1",
+  "date_format": "MM/DD/YYYY",
+  "local_sources": [
+    {
+      "id": "indeed",
+      "name": "Indeed US",
+      "type": "aggregator",
+      "terms_restricted": true,
+      "description": "US employment search engine"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "wellfound",
+      "name": "Wellfound",
+      "type": "startup",
+      "terms_restricted": false,
+      "description": "US tech startup jobs"
+    },
+    {
+      "id": "builtin",
+      "name": "BuiltIn",
+      "type": "direct",
+      "terms_restricted": false,
+      "description": "US tech community job platform"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "ashby",
+      "name": "Ashby",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Next-gen tech company ATS job boards"
+    },
+    {
+      "id": "workable",
+      "name": "Workable",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Global recruitment platform and ATS feeds"
+    },
+    {
+      "id": "smartrecruiters",
+      "name": "SmartRecruiters",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Enterprise recruiting ATS feeds"
+    }
+  ],
+  "internship_keywords": [
+    "intern",
+    "internship",
+    "summer intern",
+    "fall intern",
+    "spring intern",
+    "co-op",
+    "cooperative education",
+    "apprentice",
+    "fellowship",
+    "student researcher"
+  ],
+  "fresher_keywords": [
+    "entry level",
+    "new grad",
+    "university graduate",
+    "junior software engineer",
+    "associate"
+  ],
+  "language_codes": ["en"]
+}

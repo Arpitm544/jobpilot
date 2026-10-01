@@ -89,7 +89,34 @@ async def async_apply_job(
         )
         match = match_res.scalar_one_or_none()
         if not match:
-            return {"status": "error", "message": "Job match not found"}
+            # Fallback: match_id may be a direct Job ID pushed from discovery
+            job_res = await db.execute(select(Job).where(Job.id == match_id))
+            fallback_job = job_res.scalar_one_or_none()
+            if fallback_job:
+                # Check if a match for this user & job already exists
+                existing_m_res = await db.execute(
+                    select(JobMatch)
+                    .options(selectinload(JobMatch.job), selectinload(JobMatch.tailored_resume))
+                    .where(JobMatch.user_id == user_id, JobMatch.job_id == fallback_job.id)
+                )
+                match = existing_m_res.scalar_one_or_none()
+                if not match:
+                    match = JobMatch(
+                        id=uuid.uuid4(),
+                        user_id=user_id,
+                        job_id=fallback_job.id,
+                        match_score=75,
+                        status="queued",
+                        matched_skills=[],
+                        missing_skills=[],
+                        match_rationale="Queued via discovery"
+                    )
+                    db.add(match)
+                    await db.commit()
+                    await db.refresh(match)
+                match.job = fallback_job
+            else:
+                return {"status": "error", "message": "Job match not found"}
 
         job = match.job
 

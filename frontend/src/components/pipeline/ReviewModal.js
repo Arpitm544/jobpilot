@@ -25,9 +25,18 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
   const [msg, setMsg] = useState('');
   const [appState, setAppState] = useState(application);
 
+  React.useEffect(() => {
+    if (application) {
+      setAppState(application);
+      setError('');
+      setMsg('');
+    }
+  }, [application]);
+
   if (!isOpen || !application) return null;
 
-  const appId = appState.application_id || appState.id;
+  const app = appState || application || {};
+  const appId = app.application_id || app.id;
 
   const handleDryRun = async () => {
     setRunningDryRun(true);
@@ -36,7 +45,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
     try {
       const res = await api.post(`/apply/${appId}/dry-run`);
       setAppState({
-        ...appState,
+        ...app,
         ...res.data,
         has_proof: true,
         status: 'review_ready',
@@ -55,7 +64,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
     setError('');
     try {
       const res = await api.post(`/apply/${appId}/approve`);
-      setAppState({ ...appState, ...res.data, status: 'applied' });
+      setAppState({ ...app, ...res.data, status: 'applied' });
       setMsg('Application approved! Marked as submitted in your pipeline.');
       if (onStatusUpdate) onStatusUpdate('applied');
       setTimeout(() => onClose(), 1200);
@@ -89,16 +98,16 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
                 Review & Apply Engine (Dry-Run Mode)
               </span>
               <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-semibold uppercase">
-                {appState.ats_type || 'Greenhouse / Lever'}
+                {app.ats_type || 'Greenhouse / Lever'}
               </span>
             </div>
             <h2 className="text-lg sm:text-xl font-bold text-white mt-1">
-              {appState.title} <span className="text-slate-400 font-normal">at</span> {appState.company_name}
+              {app.title} <span className="text-slate-400 font-normal">at</span> {app.company_name}
             </h2>
             <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-              <span>{appState.location} ({appState.workplace_type || 'Remote'})</span>
+              <span>{app.location} ({app.workplace_type || 'Remote'})</span>
               <a
-                href={appState.apply_url}
+                href={app.apply_url}
                 target="_blank"
                 rel="noreferrer"
                 className="text-cyan-400 hover:underline flex items-center gap-1"
@@ -139,7 +148,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
             <div>
               <span className="text-[11px] text-slate-400 uppercase font-semibold block">Application Status</span>
               <span className="text-sm font-bold text-white uppercase tracking-wider">
-                {appState.status === 'review_ready' ? 'Review Ready (Dry-Run Proof Available)' : appState.status}
+                {app.status === 'review_ready' ? 'Review Ready (Dry-Run Proof Available)' : app.status}
               </span>
             </div>
 
@@ -158,7 +167,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5" />
-                    <span>{appState.has_proof ? 'Re-run Dry-Run Fill' : 'Run Playwright Dry-Run'}</span>
+                    <span>{app.has_proof ? 'Re-run Dry-Run Fill' : 'Run Playwright Dry-Run'}</span>
                   </>
                 )}
               </button>
@@ -173,11 +182,11 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
                 Playwright Form-Filling Verification Proof
               </span>
               <span className="text-[10px] text-slate-500">
-                {appState.has_proof ? 'High-Res Full Page Proof' : 'No screenshot yet'}
+                {app.has_proof ? 'High-Res Full Page Proof' : 'No screenshot yet'}
               </span>
             </div>
 
-            {appState.has_proof ? (
+            {app.has_proof ? (
               <div className="space-y-3">
                 <div className="relative rounded-xl overflow-hidden border border-white/10 bg-slate-950 max-h-[350px] overflow-y-auto shadow-inner group">
                   <img
@@ -189,9 +198,9 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
                     }}
                   />
                 </div>
-                {appState.proof_text && (
+                {app.proof_text && (
                   <p className="text-xs text-slate-400 font-mono bg-slate-950 p-2.5 rounded-lg border border-white/5">
-                    {appState.proof_text}
+                    {app.proof_text}
                   </p>
                 )}
               </div>
@@ -206,7 +215,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
           </div>
 
           {/* Tailored Resume & Letter Info */}
-          {appState.tailored_resume_id && (
+          {app.tailored_resume_id && (
             <div className="p-4 rounded-xl bg-indigo-950/20 border border-indigo-500/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -219,7 +228,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
               </div>
 
               <a
-                href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/tailor/${appState.tailored_resume_id}/pdf`}
+                href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/tailor/${app.tailored_resume_id}/pdf`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-all"

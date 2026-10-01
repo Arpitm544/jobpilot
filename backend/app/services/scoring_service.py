@@ -52,12 +52,12 @@ def extract_skills_heuristic(jd_text: str) -> JDParsedOutput:
         seniority = "Senior"
 
     return JDParsedOutput(
-        role_title="Software Engineer",
+        role_title="Software Engineer" if found_skills else "General Role",
         seniority=seniority,
-        required_skills=found_skills[:6] if found_skills else ["JavaScript", "Python"],
-        nice_to_have_skills=found_skills[6:] if len(found_skills) > 6 else ["Docker", "AWS"],
+        required_skills=found_skills[:6] if found_skills else [],
+        nice_to_have_skills=found_skills[6:] if len(found_skills) > 6 else [],
         tech_stack=found_skills,
-        core_responsibilities=["Build high-quality software solutions and web applications."],
+        core_responsibilities=["Build high-quality software solutions and web applications."] if found_skills else ["Perform role responsibilities."],
         keywords=found_skills
     )
 
@@ -159,7 +159,7 @@ class ScoringService:
             else:
                 missing_skills.append(req)
 
-        skill_overlap_ratio = len(matched_skills) / max(1, len(required))
+        skill_overlap_ratio = (len(matched_skills) / max(1, len(required))) if required else 0.0
 
         # 3. Embedding Semantic Similarity
         if cached_profile_vec:
@@ -206,22 +206,58 @@ class ScoringService:
         )
         final_score = max(10.0, min(99.0, final_score))
 
-        # Match Rationale
-        rationale_parts = [
-            f"Matches {len(matched_skills)} of {len(required)} required technical skills ({int(skill_overlap_ratio*100)}%)."
-        ]
-        if matched_skills:
-            rationale_parts.append(f"Strong overlap on {', '.join(matched_skills[:4])}.")
-        if missing_skills:
-            rationale_parts.append(f"Key missing skills: {', '.join(missing_skills[:3])}.")
-        if job.workplace_type == "Remote":
-            rationale_parts.append("Fully remote role aligns with your workplace preferences.")
-        
-        rationale = " ".join(rationale_parts)
+        # Check for non-technical roles or domain mismatch for developer candidates
+        NON_TECH_ROLE_RE = re.compile(
+            r"\b("
+            r"video\s*editor|video\s*editing|videographer|videography|"
+            r"youtube(?:\s*&|\s*and)?\s*content|content\s*creator|content\s*creation|"
+            r"content\s*writer|content\s*writing|copywriter|copywriting|seo\s*writer|"
+            r"graphic\s*designer|graphic\s*design|animator|animation|motion\s*graphics|"
+            r"social\s*media\s*manager|social\s*media\s*intern|community\s*manager|"
+            r"human\s*resources|hr\s*intern|talent\s*acquisition|recruiter|recruitment|"
+            r"accountant|accounting|tax\s*manager|internal\s*audit|auditor|financial\s*analyst|"
+            r"compliance\s*officer|legal\s*counsel|paralegal|"
+            r"sales\s*representative|sales\s*manager|sales\s*director|account\s*executive|"
+            r"growth\s*sales|territory\s*manager|business\s*development\s*associate|"
+            r"receptionist|office\s*assistant|administrative\s*assistant|customer\s*support|"
+            r"customer\s*success|customer\s*service|operations\s*associate|telecaller|"
+            r"training\s*program\s*manager"
+            r")\b",
+            re.IGNORECASE
+        )
+        TECH_ROLE_EXCEPTIONS_RE = re.compile(
+            r"\b(engineer|developer|architect|programmer|data\s*scientist|sde|systems|security|qa|devops|swe)\b",
+            re.IGNORECASE
+        )
 
-        # Status: Auto-queue if score >= match_threshold
-        threshold = preferences.match_threshold or 70
-        initial_status = "queued" if final_score >= threshold else "discovered"
+        user_target_roles = [r.lower().strip() for r in (preferences.target_roles or []) if r.strip()]
+        user_wants_non_tech = any(NON_TECH_ROLE_RE.search(tr) for tr in user_target_roles)
+        is_non_tech_role = bool(NON_TECH_ROLE_RE.search(job.title) and not TECH_ROLE_EXCEPTIONS_RE.search(job.title))
+
+        if is_non_tech_role and not user_wants_non_tech:
+            final_score = 15.0
+            rationale = "Role is non-technical / outside target software engineering domain."
+            initial_status = "dismissed"
+        elif not required:
+            # Job description contains no technical skills
+            final_score = min(final_score, 30.0)
+            rationale = f"Job title '{job.title}' has limited technical skills requirements."
+            initial_status = "discovered"
+        else:
+            # Match Rationale
+            rationale_parts = [
+                f"Matches {len(matched_skills)} of {len(required)} required technical skills ({int(skill_overlap_ratio*100)}%)."
+            ]
+            if matched_skills:
+                rationale_parts.append(f"Strong overlap on {', '.join(matched_skills[:4])}.")
+            if missing_skills:
+                rationale_parts.append(f"Key missing skills: {', '.join(missing_skills[:3])}.")
+            if job.workplace_type == "Remote":
+                rationale_parts.append("Fully remote role aligns with your workplace preferences.")
+            
+            rationale = " ".join(rationale_parts)
+            threshold = preferences.match_threshold or 70
+            initial_status = "queued" if final_score >= threshold else "discovered"
 
         # Check existing match
         if existing_match is not None:

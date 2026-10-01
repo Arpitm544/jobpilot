@@ -1,0 +1,102 @@
+{
+  "code": "GB",
+  "name": "United Kingdom",
+  "currency": {
+    "code": "GBP",
+    "symbol": "£",
+    "salary_unit_annual": "GBP/year",
+    "salary_unit_stipend": "per month",
+    "stipend_period_default": "monthly"
+  },
+  "cities": [
+    "London",
+    "Manchester",
+    "Birmingham",
+    "Edinburgh",
+    "Cambridge",
+    "Bristol",
+    "Leeds",
+    "Oxford",
+    "Glasgow"
+  ],
+  "timezones": [
+    "Europe/London"
+  ],
+  "phone_prefix": "+44",
+  "date_format": "DD/MM/YYYY",
+  "local_sources": [
+    {
+      "id": "indeed_uk",
+      "name": "Indeed UK",
+      "type": "aggregator",
+      "terms_restricted": true,
+      "description": "UK employment search engine"
+    },
+    {
+      "id": "otta",
+      "name": "Otta (Welcome to the Jungle)",
+      "type": "startup",
+      "terms_restricted": false,
+      "description": "UK fast-growing tech jobs"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "reed",
+      "name": "Reed UK",
+      "type": "aggregator",
+      "terms_restricted": false,
+      "description": "UK specialist recruitment"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "ashby",
+      "name": "Ashby",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Next-gen tech company ATS job boards"
+    },
+    {
+      "id": "workable",
+      "name": "Workable",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Global recruitment platform and ATS feeds"
+    }
+  ],
+  "internship_keywords": [
+    "intern",
+    "internship",
+    "placement year",
+    "industrial placement",
+    "summer placement",
+    "apprentice",
+    "degree apprentice",
+    "trainee"
+  ],
+  "fresher_keywords": [
+    "graduate scheme",
+    "graduate software engineer",
+    "entry level",
+    "junior engineer"
+  ],
+  "language_codes": ["en"]
+}

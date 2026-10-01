@@ -52,7 +52,33 @@ class ApplyService:
         )
         match = match_res.scalar_one_or_none()
         if not match:
-            raise ValueError("Job match not found.")
+            # Check if job_match_id is a direct Job.id
+            job_res = await db.execute(select(Job).where(Job.id == job_match_id))
+            job = job_res.scalar_one_or_none()
+            if job:
+                existing_m_res = await db.execute(
+                    select(JobMatch)
+                    .options(selectinload(JobMatch.job), selectinload(JobMatch.tailored_resume))
+                    .where(JobMatch.user_id == user_id, JobMatch.job_id == job.id)
+                )
+                match = existing_m_res.scalar_one_or_none()
+                if not match:
+                    match = JobMatch(
+                        id=uuid.uuid4(),
+                        user_id=user_id,
+                        job_id=job.id,
+                        match_score=75,
+                        status="queued",
+                        matched_skills=[],
+                        missing_skills=[],
+                        match_rationale="Queued via discovery"
+                    )
+                    db.add(match)
+                    await db.commit()
+                    await db.refresh(match)
+                match.job = job
+            else:
+                raise ValueError("Job match not found.")
 
         app_res = await db.execute(
             select(Application)
