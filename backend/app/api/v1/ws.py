@@ -38,8 +38,8 @@ async def websocket_endpoint(
     if not user_id:
         user_id = "anonymous"
 
-    await event_stream.connect_ws(websocket, user_id)
     try:
+        await event_stream.connect_ws(websocket, user_id)
         while True:
             # Keep socket alive and accept ping/pong or client commands
             data = await websocket.receive_text()
@@ -52,7 +52,10 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         event_stream.disconnect_ws(websocket, user_id)
     except Exception as e:
-        logger.error(f"WebSocket error for user {user_id}: {e}")
+        if "ClientDisconnected" in type(e).__name__ or "ConnectionClosed" in type(e).__name__:
+            logger.info(f"WebSocket connection closed cleanly by client for user {user_id}")
+        else:
+            logger.warning(f"WebSocket error for user {user_id}: {e}")
         event_stream.disconnect_ws(websocket, user_id)
 
 

@@ -27,12 +27,16 @@ class EventStreamManager:
 
         # Send greeting & recent events
         recent = self.recent_events.get(user_id, [])
-        await websocket.send_json({
-            "type": "CONNECTION_ESTABLISHED",
-            "message": "Connected to JobPilot real-time event stream",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "recent_events": recent[-10:] if recent else []
-        })
+        try:
+            await websocket.send_json({
+                "type": "CONNECTION_ESTABLISHED",
+                "message": "Connected to JobPilot real-time event stream",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "recent_events": recent[-10:] if recent else []
+            })
+        except Exception:
+            self.disconnect_ws(websocket, user_id)
+            raise
 
     def disconnect_ws(self, websocket: WebSocket, user_id: str):
         if user_id in self.active_connections:
@@ -80,7 +84,7 @@ class EventStreamManager:
         # 1. Send to all active WebSockets for this user
         if user_id in self.active_connections:
             dead_sockets = set()
-            for ws in self.active_connections[user_id]:
+            for ws in list(self.active_connections[user_id]):
                 try:
                     await ws.send_json(event)
                 except Exception as e:
