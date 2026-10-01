@@ -64,13 +64,15 @@ def normalize_phone(phone: str) -> str:
 
 
 def normalize_url(url: str) -> str:
-    """Strips scheme (http/https), www, and trailing slash to compare canonical domain + path"""
+    """Strips scheme (http/https), www, .git suffix, and trailing slash to compare canonical domain + path"""
     if not url:
         return ""
     u = url.strip().lower()
     u = re.sub(r"^https?://", "", u)
     u = re.sub(r"^www\.", "", u)
     u = u.rstrip("/")
+    if u.endswith(".git"):
+        u = u[:-4]
     return u
 
 
@@ -268,6 +270,32 @@ class ResumeVerifier:
 
         profile.skills = SkillCategories(**verified_skills_data)
 
+        # Normalized URLs pool for robust matching across raw text and link annotations
+        known_urls_normalized = set()
+        for l in (extracted_links or []):
+            u_norm = normalize_url(l.get("url", ""))
+            if u_norm:
+                known_urls_normalized.add(u_norm)
+        for u in re.findall(r"https?://[^\s<>\"']+|www\.[^\s<>\"']+", raw_text):
+            u_norm = normalize_url(u)
+            if u_norm:
+                known_urls_normalized.add(u_norm)
+
+        def verify_url_presence(url: Optional[str]) -> Tuple[bool, float]:
+            if not url or not url.strip():
+                return False, 0.0
+            norm = normalize_url(url)
+            if not norm:
+                return False, 0.0
+            if norm in known_urls_normalized:
+                return True, 1.0
+            for ku in known_urls_normalized:
+                if norm in ku or ku in norm:
+                    return True, 0.95
+                if fuzz.ratio(norm, ku) >= 90:
+                    return True, 0.9
+            return False, 0.0
+
         # --- 3. Experience Verification ---
         for i, exp in enumerate(profile.experience):
             company_found, c_conf, _ = find_in_text(exp.company, raw_text, threshold=75)
@@ -280,6 +308,40 @@ class ResumeVerifier:
         for i, proj in enumerate(profile.projects):
             title_found, t_conf, _ = find_in_text(proj.title, raw_text, threshold=75)
             record_meta(f"projects[{i}].title", "verified" if title_found else "unverified", t_conf)
+
+            # Project GitHub Repository URL Verification
+            if proj.github_url:
+                is_valid, conf = verify_url_presence(proj.github_url)
+                if is_valid:
+                    record_meta(f"projects[{i}].github_url", "verified", conf)
+                else:
+                    logger.warning(f"Zero-hallucination verifier: Clearing ungrounded GitHub URL '{proj.github_url}' for project '{proj.title}'")
+                    proj.github_url = None
+                    record_meta(f"projects[{i}].github_url", "missing", 0.0)
+            else:
+                record_meta(f"projects[{i}].github_url", "missing", 0.0)
+
+            # Project Live Demo URL Verification
+            if proj.demo_url:
+                is_valid, conf = verify_url_presence(proj.demo_url)
+                if is_valid:
+                    record_meta(f"projects[{i}].demo_url", "verified", conf)
+                else:
+                    logger.warning(f"Zero-hallucination verifier: Clearing ungrounded Demo URL '{proj.demo_url}' for project '{proj.title}'")
+                    proj.demo_url = None
+                    record_meta(f"projects[{i}].demo_url", "missing", 0.0)
+            else:
+                record_meta(f"projects[{i}].demo_url", "missing", 0.0)
+
+            # Keep proj.links synchronized
+            if not proj.links:
+                from app.schemas.profile import ProjectLinks
+                proj.links = ProjectLinks(github_repo=proj.github_url, live_demo=proj.demo_url)
+            else:
+                proj.links.github_repo = proj.github_url
+                proj.links.live_demo = proj.demo_url
+            if not proj.link:
+                proj.link = proj.demo_url or proj.github_url
 
         # --- 5. Education Verification ---
         for i, edu in enumerate(profile.education):

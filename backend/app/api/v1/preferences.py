@@ -65,6 +65,9 @@ async def update_job_preferences(
         if value is not None:
             setattr(prefs, key, value)
 
+    # Persist last_completed_step server-side (Step 3 completed)
+    current_user.last_completed_step = max(current_user.last_completed_step or 0, 3)
+
     await db.commit()
     await db.refresh(prefs)
     return prefs

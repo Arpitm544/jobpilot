@@ -240,7 +240,7 @@ async def get_safety_status(
     apply_mode = prefs.apply_mode if prefs else "review_then_apply"
 
     now = datetime.now(timezone.utc)
-    start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    start_of_day = datetime(now.year, now.month, now.day)
 
     count_res = await db.execute(
         select(func.count(Application.id))

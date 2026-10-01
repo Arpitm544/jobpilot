@@ -36,7 +36,10 @@ import {
   ChevronDown,
   ExternalLink,
   Github,
-  X
+  X,
+  Download,
+  RefreshCw,
+  FileCheck
 } from 'lucide-react';
 
 const SAMPLE_RESUME_TEXT = `Alex Mercer
@@ -82,9 +85,16 @@ export default function OnboardingPage() {
   const [accountFallbackFields, setAccountFallbackFields] = useState({});
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  // Step 1: Resume File
+  // Step 1: Resume & Onboarding Server State
   const [selectedFile, setSelectedFile] = useState(null);
   const [activeResumeId, setActiveResumeId] = useState(null);
+  const [onboardingState, setOnboardingState] = useState(null);
+  const [stateLoading, setStateLoading] = useState(true);
+  const [stateError, setStateError] = useState(false);
+  const [forceShowUploader, setForceShowUploader] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [incomingProfile, setIncomingProfile] = useState(null);
 
   // Strict sanitization helper: cleans null, undefined, "null", "undefined" to empty string
   const cleanStr = (val) => {
@@ -163,9 +173,14 @@ export default function OnboardingPage() {
         bullets: Array.isArray(p.bullets)
           ? p.bullets.map(cleanStr).filter(Boolean)
           : (Array.isArray(p.bullet_points) ? p.bullet_points.map(cleanStr).filter(Boolean) : []),
-        github_url: cleanStr(p.github_url || (p.link && p.link.includes('github') ? p.link : '')),
-        demo_url: cleanStr(p.demo_url || (p.link && !p.link.includes('github') ? p.link : '')),
+        github_url: cleanStr(p.github_url || p.links?.github_repo || (p.link && p.link.includes('github.com') ? p.link : '')),
+        demo_url: cleanStr(p.demo_url || p.links?.live_demo || (p.link && !p.link.includes('github.com') ? p.link : '')),
         link: cleanStr(p.link || p.github_url || p.demo_url),
+        links: {
+          github_repo: cleanStr(p.github_url || p.links?.github_repo || (p.link && p.link.includes('github.com') ? p.link : '')),
+          live_demo: cleanStr(p.demo_url || p.links?.live_demo || (p.link && !p.link.includes('github.com') ? p.link : '')),
+        },
+        source: p.source || 'resume',
         metrics: cleanStr(p.metrics),
       })),
       certifications: (apiProfile?.certifications || []).map((c) => ({
@@ -237,6 +252,11 @@ export default function OnboardingPage() {
         link: cleanStr(p.demo_url || p.github_url || p.link) || null,
         github_url: cleanStr(p.github_url) || null,
         demo_url: cleanStr(p.demo_url) || null,
+        links: {
+          github_repo: cleanStr(p.github_url) || null,
+          live_demo: cleanStr(p.demo_url) || null,
+        },
+        source: p.source || 'resume',
         metrics: cleanStr(p.metrics) || null,
       })),
       certifications: (formProfile.certifications || []).map((c) => ({
@@ -258,35 +278,6 @@ export default function OnboardingPage() {
     };
   };
 
-  const handleUploadComplete = async ({ resumeId, isCached, filename }) => {
-    setActiveResumeId(resumeId);
-    setSuccessMsg(isCached ? 'Resume retrieved from cache instantly!' : 'Resume parsed and verified successfully!');
-    try {
-      // 1. Fetch structured parsed result with field metadata
-      const res = await api.get(`/resumes/${resumeId}/parsed`);
-      if (res.data) {
-        const parsedData = res.data;
-        setParseMetadata({
-          summary_counts: parsedData.summary_counts || {},
-          field_meta: parsedData.field_meta || [],
-          ocr_used: parsedData.ocr_used || false,
-          raw_text_length: parsedData.raw_text_length || 0,
-          filename: parsedData.filename || filename,
-          status: parsedData.status,
-        });
-
-        const mapped = mapApiProfileToForm(parsedData.profile, user);
-        setProfile(mapped);
-      }
-    } catch (e) {
-      console.warn('Could not fetch /resumes/{id}/parsed, falling back to /profile/master', e);
-      await loadExistingData();
-    }
-    setTimeout(() => {
-      setSuccessMsg('');
-      setStep(2);
-    }, 1200);
-  };
 
   const getFieldBadge = (fieldPath) => {
     const rawKey = fieldPath.replace('contact_info.', '');
@@ -355,6 +346,29 @@ export default function OnboardingPage() {
   const [projectTechInput, setProjectTechInput] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null); // { type, index }
 
+  // Step 2: GitHub repo suggestion state
+  const [githubSuggestions, setGithubSuggestions] = useState({});
+  const [githubSuggestionsLoading, setGithubSuggestionsLoading] = useState(false);
+  const [githubSuggestionsNotice, setGithubSuggestionsNotice] = useState('');
+
+  const fetchGithubRepoSuggestions = async () => {
+    setGithubSuggestionsLoading(true);
+    setGithubSuggestionsNotice('');
+    try {
+      const res = await api.get('/profile/projects/github-suggestions');
+      if (res.data?.suggestions) {
+        setGithubSuggestions(res.data.suggestions);
+        if (res.data.rate_limit_notice) {
+          setGithubSuggestionsNotice(res.data.rate_limit_notice);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch github suggestions:', e);
+    } finally {
+      setGithubSuggestionsLoading(false);
+    }
+  };
+
   // Step 3: Job Preferences State
   const [preferences, setPreferences] = useState({
     target_roles: ['Full-Stack Developer', 'Frontend Developer', 'Backend Developer'],
@@ -390,27 +404,43 @@ export default function OnboardingPage() {
   // New Skill Temp State
   const [newSkill, setNewSkill] = useState({ category: 'languages', value: '' });
 
-  // On mount: if user logged in, attempt to fetch existing master profile
-  useEffect(() => {
-    if (user) {
-      loadExistingData();
-    }
-  }, [user]);
-
-  const loadExistingData = async () => {
+  // Fetch onboarding state from backend and sync steps
+  const fetchOnboardingState = async (shouldSetInitialStep = false) => {
     try {
+      setStateError(false);
+      const res = await api.get('/onboarding/state');
+      if (res.data) {
+        setOnboardingState(res.data);
+        if (shouldSetInitialStep) {
+          const lastCompleted = res.data.last_completed_step || 0;
+          if (lastCompleted >= 4) {
+            setStep(4);
+          } else {
+            setStep(Math.min(4, Math.max(1, lastCompleted + 1)));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch onboarding state:', e);
+      setStateError(true);
+    }
+  };
+
+  const loadAllUserData = async () => {
+    setStateLoading(true);
+    try {
+      await fetchOnboardingState(true);
+
       const res = await api.get('/profile/master');
       if (res.data) {
         setProfile(mapApiProfileToForm(res.data, user));
       }
-    } catch (e) {
-      // Profile may not exist yet, which is expected for fresh user
-    }
+    } catch (e) {}
 
     try {
       const prefRes = await api.get('/preferences/');
       if (prefRes.data) {
-        setPreferences(prefRes.data);
+        setPreferences((prev) => ({ ...prev, ...prefRes.data }));
       }
     } catch (e) {}
 
@@ -420,9 +450,152 @@ export default function OnboardingPage() {
         setQuestions((prev) => ({ ...prev, ...qbRes.data }));
       }
     } catch (e) {}
+
+    setStateLoading(false);
   };
 
-  // Step 1: Upload Resume
+  useEffect(() => {
+    if (user) {
+      loadAllUserData();
+    }
+  }, [user]);
+
+  // Step 1: Upload Resume Handlers
+  const handleUploadComplete = async ({ resumeId, isCached, filename }) => {
+    if (!resumeId) return;
+    setActiveResumeId(resumeId);
+    setError('');
+    setUploadLoading(true);
+    try {
+      const res = await api.get(`/resumes/${resumeId}/parsed`);
+      if (res.data) {
+        const parsedData = res.data;
+        setParseMetadata({
+          summary_counts: parsedData.summary_counts || {},
+          field_meta: parsedData.field_meta || [],
+          ocr_used: parsedData.ocr_used || false,
+          raw_text_length: parsedData.raw_text_length || 0,
+          filename: parsedData.filename || filename,
+          status: parsedData.status,
+        });
+
+        const parsedProfile = parsedData.profile;
+        if (parsedProfile) {
+          const mappedIncoming = mapApiProfileToForm(parsedProfile, user);
+          if (onboardingState?.has_active_profile) {
+            // If profile already exists, ask user whether to merge or replace
+            setIncomingProfile(mappedIncoming);
+            setMergeModalOpen(true);
+          } else {
+            // Fresh user: directly apply parsed profile
+            setProfile(mappedIncoming);
+            setSuccessMsg(isCached ? 'Resume retrieved from cache instantly!' : 'Resume parsed and verified successfully!');
+            await api.put('/onboarding/step', { step: 1 });
+            await fetchOnboardingState();
+            setTimeout(() => {
+              setSuccessMsg('');
+              setStep(2);
+            }, 1000);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to retrieve parsed resume:', err);
+      setError(err.response?.data?.detail || 'Failed to retrieve parsed resume.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  // Merge / Replace Choice Handlers
+  const handleKeepAndFillEmpties = async () => {
+    if (!incomingProfile) return;
+    setProfile((prev) => {
+      const mergedContact = { ...prev.contact_info };
+      for (const [k, v] of Object.entries(incomingProfile.contact_info || {})) {
+        if (!mergedContact[k] && v) {
+          mergedContact[k] = v;
+        }
+      }
+
+      const mergedSummary = prev.summary || incomingProfile.summary;
+
+      const mergedSkills = { ...prev.skills };
+      for (const cat of ['languages', 'frameworks', 'databases', 'tools', 'cloud_devops', 'soft_skills']) {
+        const existingList = prev.skills?.[cat] || [];
+        const incomingList = incomingProfile.skills?.[cat] || [];
+        mergedSkills[cat] = Array.from(new Set([...existingList, ...incomingList]));
+      }
+
+      let mergedProjects = [...(prev.projects || [])];
+      if (mergedProjects.length === 0) {
+        mergedProjects = incomingProfile.projects || [];
+      } else {
+        const existingTitles = new Set(mergedProjects.map((p) => p.title?.toLowerCase().trim()));
+        for (const p of incomingProfile.projects || []) {
+          if (p.title && !existingTitles.has(p.title.toLowerCase().trim())) {
+            mergedProjects.push(p);
+          }
+        }
+      }
+
+      let mergedExp = [...(prev.experience || [])];
+      if (mergedExp.length === 0) {
+        mergedExp = incomingProfile.experience || [];
+      } else {
+        const existingKeys = new Set(mergedExp.map((e) => `${e.company?.toLowerCase()}_${e.role?.toLowerCase()}`));
+        for (const e of incomingProfile.experience || []) {
+          const key = `${e.company?.toLowerCase()}_${e.role?.toLowerCase()}`;
+          if (!existingKeys.has(key)) {
+            mergedExp.push(e);
+          }
+        }
+      }
+
+      let mergedEdu = [...(prev.education || [])];
+      if (mergedEdu.length === 0) {
+        mergedEdu = incomingProfile.education || [];
+      }
+
+      return {
+        ...prev,
+        contact_info: mergedContact,
+        summary: mergedSummary,
+        skills: mergedSkills,
+        projects: mergedProjects,
+        experience: mergedExp,
+        education: mergedEdu,
+      };
+    });
+
+    setMergeModalOpen(false);
+    setDiffModalOpen(false);
+    setForceShowUploader(false);
+    setSuccessMsg('Merged new resume data into your profile (preserved your edits).');
+    await api.put('/onboarding/step', { step: 1 });
+    await fetchOnboardingState();
+    setTimeout(() => {
+      setSuccessMsg('');
+      setStep(2);
+    }, 800);
+  };
+
+  const handleReplaceProfile = async () => {
+    if (!incomingProfile) return;
+    setProfile(incomingProfile);
+    setMergeModalOpen(false);
+    setDiffModalOpen(false);
+    setForceShowUploader(false);
+    setSuccessMsg('Replaced profile with newly parsed resume data.');
+    await api.put('/onboarding/step', { step: 1 });
+    await fetchOnboardingState();
+    setTimeout(() => {
+      setSuccessMsg('');
+      setStep(2);
+    }, 800);
+  };
+
+  // Step 1 direct file upload (fallback)
   const handleFileUpload = async (file) => {
     if (!file) return;
     setError('');
@@ -434,14 +607,22 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const parsed = res.data.parsed_profile;
-      setProfile(mapApiProfileToForm(parsed, user));
-      setSuccessMsg('Resume parsed and structured into Master Profile successfully!');
-      setTimeout(() => {
-        setSuccessMsg('');
-        setStep(2);
-      }, 1200);
+      const mapped = mapApiProfileToForm(parsed, user);
+      if (onboardingState?.has_active_profile) {
+        setIncomingProfile(mapped);
+        setMergeModalOpen(true);
+      } else {
+        setProfile(mapped);
+        setSuccessMsg('Resume parsed and structured into Master Profile successfully!');
+        await api.put('/onboarding/step', { step: 1 });
+        await fetchOnboardingState();
+        setTimeout(() => {
+          setSuccessMsg('');
+          setStep(2);
+        }, 1200);
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to parse resume. You can also load sample data.');
+      setError(err.response?.data?.detail || 'Failed to parse resume.');
     } finally {
       setUploadLoading(false);
     }
@@ -455,7 +636,7 @@ export default function OnboardingPage() {
     await handleFileUpload(sampleFile);
   };
 
-  // Step 2: Save Profile
+  // Step 2: Save Master Profile
   const handleSaveProfile = async () => {
     setError('');
     const name = cleanStr(profile.contact_info?.full_name);
@@ -483,6 +664,8 @@ export default function OnboardingPage() {
     try {
       const payload = formToApi(profile);
       await api.put('/profile/master', payload);
+      await api.put('/onboarding/step', { step: 2 });
+      await fetchOnboardingState();
       setSuccessMsg('Master Profile saved as single source of truth!');
       setTimeout(() => {
         setSuccessMsg('');
@@ -490,6 +673,46 @@ export default function OnboardingPage() {
       }, 800);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save master profile.');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  // Step 3: Save Job Preferences
+  const handleSavePreferences = async () => {
+    setError('');
+    setSaveLoading(true);
+    try {
+      await api.put('/preferences', preferences);
+      await api.put('/onboarding/step', { step: 3 });
+      await fetchOnboardingState();
+      setSuccessMsg('Job preferences saved!');
+      setTimeout(() => {
+        setSuccessMsg('');
+        setStep(4);
+      }, 600);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save job preferences.');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  // Step 4: Complete Onboarding & Save Question Bank
+  const handleCompleteOnboarding = async () => {
+    setError('');
+    setSaveLoading(true);
+    try {
+      await api.put('/profile/question-bank', questions);
+      await api.put('/onboarding/step', { step: 4 });
+      await fetchOnboardingState();
+      setSuccessMsg('Onboarding complete! Your profile is automated.');
+      setTimeout(() => {
+        setSuccessMsg('');
+        router.push('/pipeline');
+      }, 800);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save questions.');
     } finally {
       setSaveLoading(false);
     }
@@ -751,6 +974,38 @@ export default function OnboardingPage() {
       <Navbar />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Onboarding Complete Banner (if fully onboarded) */}
+        {onboardingState?.last_completed_step >= 4 && (
+          <div className="mb-8 p-5 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-indigo-950/40 to-slate-900 border border-emerald-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-md">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <Trophy className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Onboarding Complete!</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Ready for Automation
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Your Master Profile, job preferences, and question bank are set up. You can review them anytime or proceed to your job pipeline.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => router.push('/pipeline')}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Open Pipeline</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Stepper Progress Bar */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-4">
@@ -779,34 +1034,41 @@ export default function OnboardingPage() {
               { num: 2, label: 'Master Profile' },
               { num: 3, label: 'Job Preferences' },
               { num: 4, label: 'Question Bank' },
-            ].map((s) => (
-              <button
-                key={s.num}
-                onClick={() => setStep(s.num)}
-                className={`text-left p-3 rounded-xl border transition-all ${
-                  step === s.num
-                    ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
-                    : step > s.num
-                    ? 'bg-slate-900/60 border-emerald-500/30 text-emerald-400'
-                    : 'bg-slate-900/30 border-white/5 text-slate-500'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      step === s.num
-                        ? 'bg-indigo-500 text-white'
-                        : step > s.num
-                        ? 'bg-emerald-500 text-black'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {step > s.num ? '✓' : s.num}
-                  </span>
-                  <span className="text-xs font-medium truncate">{s.label}</span>
-                </div>
-              </button>
-            ))}
+            ].map((s) => {
+              const isCompleted = (onboardingState?.last_completed_step || 0) >= s.num;
+              const isClickable = isCompleted || s.num <= (onboardingState?.last_completed_step || 0) + 1;
+              return (
+                <button
+                  key={s.num}
+                  disabled={!isClickable}
+                  onClick={() => setStep(s.num)}
+                  className={`text-left p-3 rounded-xl border transition-all ${
+                    step === s.num
+                      ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                      : isCompleted
+                      ? 'bg-slate-900/60 border-emerald-500/30 text-emerald-400 hover:border-emerald-500/60 cursor-pointer'
+                      : isClickable
+                      ? 'bg-slate-900/30 border-white/10 text-slate-300 hover:border-indigo-500/40 cursor-pointer'
+                      : 'bg-slate-900/20 border-white/5 text-slate-600 cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        step === s.num
+                          ? 'bg-indigo-500 text-white'
+                          : isCompleted
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {isCompleted ? '✓' : s.num}
+                    </span>
+                    <span className="text-xs font-medium truncate">{s.label}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -829,18 +1091,163 @@ export default function OnboardingPage() {
         {/* ---------------------------------------------------- */}
         {step === 1 && (
           <div className="space-y-6">
-            <div className="text-center max-w-lg mx-auto">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Upload your latest Resume</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                We parse your PDF or DOCX into a structured JSON Master Profile with strict zero-hallucination verification.
-              </p>
-            </div>
+            {stateLoading ? (
+              /* Loading Skeleton: prevents flash of empty upload screen */
+              <div className="space-y-6 animate-pulse">
+                <div className="text-center max-w-lg mx-auto space-y-2">
+                  <div className="h-7 bg-slate-800 rounded-xl w-3/4 mx-auto" />
+                  <div className="h-4 bg-slate-800/60 rounded-lg w-1/2 mx-auto" />
+                </div>
+                <div className="p-8 rounded-2xl bg-slate-900/40 border border-white/5 space-y-4">
+                  <div className="h-12 bg-slate-800/50 rounded-xl w-full" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="h-20 bg-slate-800/30 rounded-xl" />
+                    <div className="h-20 bg-slate-800/30 rounded-xl" />
+                  </div>
+                  <div className="h-10 bg-slate-800/50 rounded-xl w-1/3" />
+                </div>
+              </div>
+            ) : stateError ? (
+              /* Error State with Retry */
+              <div className="p-8 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-center space-y-4">
+                <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
+                <h3 className="text-base font-semibold text-white">Could not load onboarding state</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Unable to connect to the backend server. Please check your network connection and retry.
+                </p>
+                <button
+                  type="button"
+                  onClick={loadAllUserData}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-600/20"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </button>
+              </div>
+            ) : (onboardingState?.has_resume && onboardingState?.has_active_profile && !forceShowUploader) ? (
+              /* RESUME ON FILE CARD: Displays saved resume, summary, and actions */
+              <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950 border border-indigo-500/20 shadow-2xl backdrop-blur-xl space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                      <FileCheck className="w-6 h-6 text-indigo-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-bold text-white truncate max-w-[280px] sm:max-w-md">
+                          {onboardingState.resume?.filename || 'Resume on File'}
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Parsed & Verified
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Uploaded {onboardingState.resume?.uploaded_at ? new Date(onboardingState.resume.uploaded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'recently'} • Zero Hallucination Verified
+                      </p>
+                    </div>
+                  </div>
 
-            <ResumeUploader
-              onUploadSuccess={handleUploadComplete}
-              onSkipToManual={() => setStep(2)}
-              sampleResumeText={SAMPLE_RESUME_TEXT}
-            />
+                  {onboardingState.resume?.download_url && (
+                    <a
+                      href={api.defaults.baseURL ? `${api.defaults.baseURL}${onboardingState.resume.download_url}` : onboardingState.resume.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium border border-white/10 transition-colors shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download / View Resume</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* Resume Summary & Completeness Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Extracted Content</span>
+                    <p className="text-sm font-medium text-white">
+                      {onboardingState.resume?.parse_summary || '22 frameworks, 4 projects, 1 education entry'}
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Master Profile Completeness</span>
+                      <span className="text-xs font-bold text-indigo-400">{onboardingState.profile_completeness || 0}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${onboardingState.profile_completeness || 0}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary Actions */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep(Math.min(4, Math.max(2, (onboardingState.last_completed_step || 1) + 1)))}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue with this resume</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium border border-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span>Review / edit my profile</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForceShowUploader(true)}
+                    className="px-4 py-2.5 rounded-xl bg-transparent hover:bg-white/5 text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors ml-auto flex items-center gap-2 cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload a new resume</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Upload Zone (New Users or Uploading a New Resume) */
+              <div className="space-y-4">
+                {forceShowUploader && (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>
+                        <strong>Notice:</strong> Uploading a new resume creates a draft and will not overwrite your saved profile until you confirm.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForceShowUploader(false)}
+                      className="text-amber-400 hover:text-white underline underline-offset-2 shrink-0 cursor-pointer"
+                    >
+                      ← Keep current resume
+                    </button>
+                  </div>
+                )}
+
+                <div className="text-center max-w-lg mx-auto">
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Upload your latest Resume</h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    We parse your PDF or DOCX into a structured JSON Master Profile with strict zero-hallucination verification.
+                  </p>
+                </div>
+
+                <ResumeUploader
+                  onUploadSuccess={handleUploadComplete}
+                  onSkipToManual={() => setStep(2)}
+                  sampleResumeText={SAMPLE_RESUME_TEXT}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -1537,15 +1944,40 @@ export default function OnboardingPage() {
                         {profile.projects.length}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addProject}
-                      className="px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-sm font-medium flex items-center gap-1.5 transition-all"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Project</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {profile.contact_info?.github && (
+                        <button
+                          type="button"
+                          onClick={fetchGithubRepoSuggestions}
+                          disabled={githubSuggestionsLoading}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+                          title="Fuzzy match projects to your public GitHub repositories"
+                        >
+                          {githubSuggestionsLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                          ) : (
+                            <Github className="w-3.5 h-3.5 text-purple-400" />
+                          )}
+                          <span>{githubSuggestionsLoading ? 'Finding repos...' : 'Find repos from my GitHub'}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={addProject}
+                        className="px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-sm font-medium flex items-center gap-1.5 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Project</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {githubSuggestionsNotice && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{githubSuggestionsNotice}</span>
+                    </div>
+                  )}
 
                   {profile.projects.length === 0 ? (
                     <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
@@ -1642,7 +2074,9 @@ export default function OnboardingPage() {
                               />
                             </div>
                             <div>
-                              <label className="text-sm font-medium text-slate-300">Role / Contribution</label>
+                              <label className="text-sm font-medium text-slate-300">
+                                Role / Contribution <span className="text-xs text-slate-500 font-normal">(only if in resume)</span>
+                              </label>
                               <input
                                 type="text"
                                 placeholder="e.g. Creator / Full-Stack Engineer"
@@ -1658,7 +2092,9 @@ export default function OnboardingPage() {
                           </div>
 
                           <div>
-                            <label className="text-sm font-medium text-slate-300">Short Description</label>
+                            <label className="text-sm font-medium text-slate-300">
+                              Short Description <span className="text-xs text-slate-500 font-normal">(overview before bullets)</span>
+                            </label>
                             <input
                               type="text"
                               placeholder="Brief 1-2 sentence overview of the project architecture and what problem it solves..."
@@ -1674,10 +2110,22 @@ export default function OnboardingPage() {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
-                                <Github className="w-3.5 h-3.5 text-slate-400" />
-                                <span>GitHub Repository URL</span>
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                                  <Github className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>GitHub Repository URL</span>
+                                </label>
+                                {proj.source === 'github_suggestion' ? (
+                                  <span className="text-[11px] font-medium text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                                    From GitHub suggestion
+                                  </span>
+                                ) : !proj.github_url ? (
+                                  <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    Missing • Check this
+                                  </span>
+                                ) : null}
+                              </div>
                               <input
                                 type="url"
                                 placeholder="https://github.com/..."
@@ -1685,16 +2133,52 @@ export default function OnboardingPage() {
                                 onChange={(e) => {
                                   const updated = [...profile.projects];
                                   updated[idx].github_url = e.target.value;
+                                  updated[idx].source = 'manual';
                                   setProfile({ ...profile, projects: updated });
                                 }}
                                 className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                               />
+
+                              {/* GitHub Suggestion Chips */}
+                              {githubSuggestions[proj.title] && githubSuggestions[proj.title].length > 0 && !proj.github_url && (
+                                <div className="mt-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1.5">
+                                  <div className="text-[11px] font-medium text-indigo-300 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                                    <span>Suggested from your GitHub — click to confirm:</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {githubSuggestions[proj.title].map((sug, sIdx) => (
+                                      <button
+                                        key={sIdx}
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = [...profile.projects];
+                                          updated[idx].github_url = sug.url;
+                                          updated[idx].source = 'github_suggestion';
+                                          setProfile({ ...profile, projects: updated });
+                                        }}
+                                        className="text-xs px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 text-indigo-200 flex items-center gap-1.5 transition-all text-left group"
+                                        title={sug.description || sug.repo_name}
+                                      >
+                                        <Github className="w-3 h-3 text-indigo-300 group-hover:text-white" />
+                                        <span className="font-semibold">{sug.repo_name}</span>
+                                        <span className="text-[10px] text-indigo-300/70">({sug.score}%)</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
-                                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                                <span>Live Demo URL</span>
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Live Demo URL</span>
+                                </label>
+                                {!proj.demo_url && (
+                                  <span className="text-[11px] text-slate-500 italic">Optional</span>
+                                )}
+                              </div>
                               <input
                                 type="url"
                                 placeholder="https://myproject.com"
@@ -2468,6 +2952,201 @@ export default function OnboardingPage() {
                 <span>Complete Onboarding & Go to Profile</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Merge vs Replace Decision Modal */}
+        {mergeModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">New Resume Parsed</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      You already have an active profile saved. How would you like to apply the newly parsed data?
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMergeModalOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Option 1: Safest - Keep edits & fill empties */}
+                <div
+                  onClick={handleKeepAndFillEmpties}
+                  className="p-4 rounded-xl border border-indigo-500/40 bg-indigo-950/30 hover:bg-indigo-950/50 cursor-pointer transition-all space-y-1 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white group-hover:text-indigo-300 transition-colors">
+                      Keep my profile and only fill empty fields
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">
+                      Recommended (Safest)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Preserves any manual edits you made previously. Missing contact info, skills, and new projects from this resume are added.
+                  </p>
+                </div>
+
+                {/* Option 2: Replace */}
+                <div
+                  onClick={handleReplaceProfile}
+                  className="p-4 rounded-xl border border-white/10 bg-slate-800/40 hover:bg-slate-800/70 cursor-pointer transition-all space-y-1 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Replace my profile with the new data
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                      Overwrites All
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Replaces your current profile entirely with the newly parsed resume content.
+                  </p>
+                </div>
+
+                {/* Option 3: Review differences */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMergeModalOpen(false);
+                    setDiffModalOpen(true);
+                  }}
+                  className="w-full text-center py-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors cursor-pointer"
+                >
+                  Review differences first →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Diff Review Modal */}
+        {diffModalOpen && incomingProfile && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    Review Profile Differences
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Compare your saved Master Profile with the newly parsed resume data.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiffModalOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+                {/* Contact comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Contact Info</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current Saved</span>
+                      <p className="text-white font-medium">{profile.contact_info?.full_name || '(empty)'}</p>
+                      <p>{profile.contact_info?.email || '(empty)'}</p>
+                      <p>{profile.contact_info?.phone || '(empty)'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">New from Resume</span>
+                      <p className="text-white font-medium">{incomingProfile.contact_info?.full_name || '(empty)'}</p>
+                      <p>{incomingProfile.contact_info?.email || '(empty)'}</p>
+                      <p>{incomingProfile.contact_info?.phone || '(empty)'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Skills Comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Skills Count</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current Skills</span>
+                      <p className="text-white">
+                        {Object.values(profile.skills || {}).reduce((acc, l) => acc + (Array.isArray(l) ? l.length : 0), 0)} skills recorded
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">Incoming Skills</span>
+                      <p className="text-white">
+                        {Object.values(incomingProfile.skills || {}).reduce((acc, l) => acc + (Array.isArray(l) ? l.length : 0), 0)} skills detected
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Projects Comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Projects Detected</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current ({profile.projects?.length || 0})</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 mt-1">
+                        {(profile.projects || []).map((p, idx) => (
+                          <li key={idx} className="truncate">{p.title || 'Untitled Project'}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">Incoming ({incomingProfile.projects?.length || 0})</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 mt-1">
+                        {(incomingProfile.projects || []).map((p, idx) => (
+                          <li key={idx} className="truncate">{p.title || 'Untitled Project'}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiffModalOpen(false);
+                    setMergeModalOpen(true);
+                  }}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReplaceProfile}
+                  className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold cursor-pointer"
+                >
+                  Replace All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeepAndFillEmpties}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 cursor-pointer"
+                >
+                  Keep My Edits & Fill Empties
+                </button>
+              </div>
             </div>
           </div>
         )}

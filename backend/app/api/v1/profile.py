@@ -1,7 +1,7 @@
 import os
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,8 @@ from app.schemas.profile import (
 )
 from app.api.deps import get_current_user
 from app.services.resume_parser import resume_parser_service
+from app.services.resume_verifier import resume_verifier
+from app.services.github_service import github_repo_suggester
 from app.config import settings
 
 router = APIRouter(prefix="/profile", tags=["Profile & Resume"])
@@ -56,7 +58,7 @@ async def upload_and_parse_resume(
 
     # Run parsing
     try:
-        parsed_data, raw_text, parsing_mode = await resume_parser_service.parse_resume_file(
+        parsed_data, raw_text, extracted_links, ocr_used, parsing_mode = await resume_parser_service.parse_resume_file(
             file_bytes=content,
             filename=file.filename or "resume.pdf"
         )
@@ -65,6 +67,13 @@ async def upload_and_parse_resume(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to parse resume: {str(e)}"
         )
+
+    # Zero-hallucination verification
+    verified_data, _, _ = resume_verifier.verify_profile(
+        profile=parsed_data,
+        raw_text=raw_text,
+        extracted_links=extracted_links
+    )
 
     # Upsert primary Master Profile in database
     result = await db.execute(
@@ -75,7 +84,7 @@ async def upload_and_parse_resume(
     )
     profile = result.scalar_one_or_none()
 
-    profile_dict = parsed_data.model_dump()
+    profile_dict = verified_data.model_dump()
 
     if profile:
         profile.contact_info = profile_dict.get("contact_info", {})
@@ -110,20 +119,43 @@ async def upload_and_parse_resume(
         db.add(profile)
 
     # If contact info contains name and user hasn't set their full name, update user
-    if parsed_data.contact_info.full_name and not current_user.full_name:
-        current_user.full_name = parsed_data.contact_info.full_name
+    if verified_data.contact_info.full_name and not current_user.full_name:
+        current_user.full_name = verified_data.contact_info.full_name
+
+    current_user.last_completed_step = max(current_user.last_completed_step or 0, 1)
 
     await db.commit()
 
     return ResumeParseResponse(
         success=True,
-        parsed_profile=parsed_data,
+        parsed_profile=verified_data,
         raw_text=raw_text[:2000],  # preview
-        detected_name=parsed_data.contact_info.full_name,
-        detected_email=parsed_data.contact_info.email,
+        detected_name=verified_data.contact_info.full_name,
+        detected_email=verified_data.contact_info.email,
         confidence_score=0.98 if parsing_mode == "gemini_ai" else 0.85,
         parsing_mode=parsing_mode
     )
+
+
+def _normalize_projects_list(projects: List[Any]) -> List[Dict[str, Any]]:
+    normalized = []
+    for p in projects or []:
+        p_dict = dict(p) if isinstance(p, dict) else (p.model_dump() if hasattr(p, "model_dump") else {})
+        links = p_dict.get("links") or {}
+        gh = p_dict.get("github_url") or links.get("github_repo")
+        demo = p_dict.get("demo_url") or links.get("live_demo")
+        raw_link = p_dict.get("link")
+        if raw_link:
+            if "github.com" in str(raw_link) and not gh:
+                gh = raw_link
+            elif "github.com" not in str(raw_link) and not demo:
+                demo = raw_link
+        p_dict["github_url"] = gh
+        p_dict["demo_url"] = demo
+        p_dict["link"] = demo or gh or raw_link
+        p_dict["links"] = {"github_repo": gh, "live_demo": demo}
+        normalized.append(p_dict)
+    return normalized
 
 
 @router.get("/master", response_model=MasterProfileResponse)
@@ -175,6 +207,10 @@ async def get_master_profile(
         db.add(profile)
         await db.commit()
         await db.refresh(profile)
+
+    if profile and profile.projects:
+        profile.projects = _normalize_projects_list(profile.projects)
+
     return profile
 
 
@@ -193,7 +229,6 @@ async def update_master_profile(
     )
     profile = result.scalar_one_or_none()
     if not profile:
-        # Create empty profile to allow direct editing
         profile = MasterProfile(
             id=uuid.uuid4(),
             user_id=current_user.id,
@@ -211,12 +246,20 @@ async def update_master_profile(
         db.add(profile)
 
     update_data = body.model_dump(exclude_unset=True)
+    if "projects" in update_data and update_data["projects"] is not None:
+        update_data["projects"] = _normalize_projects_list(update_data["projects"])
+
     for key, value in update_data.items():
         if value is not None:
             setattr(profile, key, value)
 
+    # Persist last_completed_step server-side (Step 2 completed)
+    current_user.last_completed_step = max(current_user.last_completed_step or 0, 2)
+
     await db.commit()
     await db.refresh(profile)
+    if profile.projects:
+        profile.projects = _normalize_projects_list(profile.projects)
     return profile
 
 
@@ -262,6 +305,78 @@ async def update_question_bank(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(qb, field, value)
 
+    # Persist last_completed_step server-side (Step 4 completed)
+    current_user.last_completed_step = max(current_user.last_completed_step or 0, 4)
+
     await db.commit()
     await db.refresh(qb)
     return qb
+
+
+@router.get("/projects/github-suggestions")
+async def get_github_repo_suggestions(
+    username: Optional[str] = Query(None),
+    project_name: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Opt-in suggestion flow: Discovers user's GitHub repositories and returns fuzzy-matched candidates
+    for projects without auto-filling or fabricating data.
+    """
+    gh_user = username
+    if not gh_user:
+        # Check active master profile contact_info
+        result = await db.execute(
+            select(MasterProfile).where(
+                MasterProfile.user_id == current_user.id,
+                MasterProfile.is_primary == True
+            )
+        )
+        profile = result.scalar_one_or_none()
+        if profile and profile.contact_info:
+            gh_link = profile.contact_info.get("github") or ""
+            if "github.com" in gh_link:
+                gh_user = gh_link.rstrip("/").split("/")[-1]
+
+    if not gh_user:
+        return {
+            "status": "no_username",
+            "message": "No GitHub profile linked. Please provide your GitHub username.",
+            "suggestions": {}
+        }
+
+    repos, err_msg = await github_repo_suggester.fetch_user_repositories(gh_user)
+    if err_msg and not repos:
+        return {
+            "status": "error",
+            "message": err_msg,
+            "username": gh_user,
+            "suggestions": {}
+        }
+
+    # Fetch projects to match against
+    projects_to_match = []
+    if project_name:
+        projects_to_match = [{"title": project_name}]
+    else:
+        result = await db.execute(
+            select(MasterProfile).where(
+                MasterProfile.user_id == current_user.id,
+                MasterProfile.is_primary == True
+            )
+        )
+        profile = result.scalar_one_or_none()
+        if profile and profile.projects:
+            projects_to_match = profile.projects
+
+    suggestions = github_repo_suggester.match_projects_to_repos(projects_to_match, repos, threshold=65.0)
+
+    return {
+        "status": "ok",
+        "username": gh_user,
+        "repo_count": len(repos),
+        "suggestions": suggestions,
+        "rate_limit_notice": err_msg if err_msg else None
+    }
+
