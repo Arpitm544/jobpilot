@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/authContext';
 import { api } from '@/lib/api';
+import ResumeUploader from '@/components/resume/ResumeUploader';
 import {
   UploadCloud,
   FileText,
@@ -25,7 +26,8 @@ import {
   Briefcase,
   MapPin,
   DollarSign,
-  User
+  User,
+  Info
 } from 'lucide-react';
 
 const SAMPLE_RESUME_TEXT = `Alex Mercer
@@ -67,9 +69,125 @@ export default function OnboardingPage() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [viewJson, setViewJson] = useState(false);
+  const [parseMetadata, setParseMetadata] = useState(null);
+  const [accountFallbackFields, setAccountFallbackFields] = useState({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Step 1: Resume File
   const [selectedFile, setSelectedFile] = useState(null);
+  const [activeResumeId, setActiveResumeId] = useState(null);
+
+  // Mapper function ensuring consistent snake_case schema from API to frontend form
+  const mapApiProfileToForm = (apiProfile, currentUser = null) => {
+    const contact = apiProfile?.contact_info || {};
+    const fallbacks = {};
+
+    let fullName = contact.full_name || '';
+    if (!fullName && currentUser?.full_name) {
+      fullName = currentUser.full_name;
+      fallbacks.full_name = true;
+    }
+
+    let email = contact.email || '';
+    if (!email && currentUser?.email) {
+      email = currentUser.email;
+      fallbacks.email = true;
+    }
+
+    setAccountFallbackFields(fallbacks);
+
+    return {
+      contact_info: {
+        full_name: fullName,
+        email: email,
+        phone: contact.phone || '',
+        location: contact.location || '',
+        linkedin: contact.linkedin || '',
+        github: contact.github || '',
+        portfolio: contact.portfolio || '',
+      },
+      summary: apiProfile?.summary || '',
+      skills: {
+        languages: apiProfile?.skills?.languages || [],
+        frameworks: apiProfile?.skills?.frameworks || [],
+        databases: apiProfile?.skills?.databases || [],
+        tools: apiProfile?.skills?.tools || [],
+        cloud_devops: apiProfile?.skills?.cloud_devops || [],
+        soft_skills: apiProfile?.skills?.soft_skills || [],
+      },
+      experience: apiProfile?.experience || [],
+      projects: apiProfile?.projects || [],
+      education: apiProfile?.education || [],
+      certifications: apiProfile?.certifications || [],
+      links: apiProfile?.links || [],
+    };
+  };
+
+  const handleUploadComplete = async ({ resumeId, isCached, filename }) => {
+    setActiveResumeId(resumeId);
+    setSuccessMsg(isCached ? 'Resume retrieved from cache instantly!' : 'Resume parsed and verified successfully!');
+    try {
+      // 1. Fetch structured parsed result with field metadata
+      const res = await api.get(`/resumes/${resumeId}/parsed`);
+      if (res.data) {
+        const parsedData = res.data;
+        setParseMetadata({
+          summary_counts: parsedData.summary_counts || {},
+          field_meta: parsedData.field_meta || [],
+          ocr_used: parsedData.ocr_used || false,
+          raw_text_length: parsedData.raw_text_length || 0,
+          filename: parsedData.filename || filename,
+          status: parsedData.status,
+        });
+
+        const mapped = mapApiProfileToForm(parsedData.profile, user);
+        setProfile(mapped);
+      }
+    } catch (e) {
+      console.warn('Could not fetch /resumes/{id}/parsed, falling back to /profile/master', e);
+      await loadExistingData();
+    }
+    setTimeout(() => {
+      setSuccessMsg('');
+      setStep(2);
+    }, 1200);
+  };
+
+  const getFieldBadge = (fieldPath) => {
+    const rawKey = fieldPath.replace('contact_info.', '');
+    if (accountFallbackFields[rawKey]) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+          from your account
+        </span>
+      );
+    }
+    if (!parseMetadata?.field_meta) return null;
+    const meta = parseMetadata.field_meta.find((m) => m.field_path === fieldPath);
+    if (!meta) return null;
+
+    if (meta.status === 'verified') {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+          Verified
+        </span>
+      );
+    }
+    if (meta.status === 'unverified') {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          <AlertCircle className="w-3 h-3 text-amber-400" />
+          Check this
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-white/5">
+        Missing
+      </span>
+    );
+  };
 
   // Step 2: Master Profile State
   const [profile, setProfile] = useState({
@@ -417,82 +535,19 @@ export default function OnboardingPage() {
         {/* STEP 1: RESUME UPLOAD & PARSING                      */}
         {/* ---------------------------------------------------- */}
         {step === 1 && (
-          <div className="glass-panel p-8 rounded-2xl shadow-xl space-y-6">
+          <div className="space-y-6">
             <div className="text-center max-w-lg mx-auto">
-              <h2 className="text-xl font-bold text-white">Upload your latest Resume</h2>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Upload your latest Resume</h2>
               <p className="text-sm text-slate-400 mt-1">
-                We parse your PDF or DOCX into a structured JSON Master Profile using Gemini AI and layout analysis.
+                We parse your PDF or DOCX into a structured JSON Master Profile with strict zero-hallucination verification.
               </p>
             </div>
 
-            {/* Dropzone */}
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                  const f = e.dataTransfer.files[0];
-                  setSelectedFile(f);
-                  handleFileUpload(f);
-                }
-              }}
-              className="border-2 border-dashed border-white/15 hover:border-indigo-500/50 bg-slate-950/40 hover:bg-slate-900/40 rounded-2xl p-10 text-center transition-all cursor-pointer relative group"
-            >
-              <input
-                type="file"
-                accept=".pdf,.docx,.txt"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    const f = e.target.files[0];
-                    setSelectedFile(f);
-                    handleFileUpload(f);
-                  }
-                }}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                disabled={uploadLoading}
-              />
-
-              <div className="flex flex-col items-center justify-center space-y-4">
-                <div className="h-16 w-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
-                  {uploadLoading ? (
-                    <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
-                  ) : (
-                    <UploadCloud className="w-8 h-8" />
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-base font-medium text-white">
-                    {uploadLoading ? 'Scanning & Structuring with Gemini AI...' : 'Drag & drop your resume here, or browse'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">Supports PDF, DOCX, TXT (up to 10MB)</p>
-                </div>
-
-                {selectedFile && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs">
-                    <FileText className="w-4 h-4 text-cyan-400" />
-                    <span>{selectedFile.name}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Demo Loader */}
-            <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-xs text-slate-400 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Zero-hallucination constraint active: Every skill & metric will be anchored to this profile.</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleLoadSample}
-                disabled={uploadLoading}
-                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-all flex items-center gap-2 shrink-0"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Load Sample Senior Profile</span>
-              </button>
-            </div>
+            <ResumeUploader
+              onUploadSuccess={handleUploadComplete}
+              onSkipToManual={() => setStep(2)}
+              sampleResumeText={SAMPLE_RESUME_TEXT}
+            />
           </div>
         )}
 
@@ -501,6 +556,67 @@ export default function OnboardingPage() {
         {/* ---------------------------------------------------- */}
         {step === 2 && (
           <div className="space-y-6">
+            {/* Extraction Summary Banner */}
+            {parseMetadata?.summary_counts && (
+              <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg backdrop-blur-md">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-indigo-300" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-white">
+                      Found: {parseMetadata.summary_counts.skills || 0} skills, {parseMetadata.summary_counts.projects || 0} projects, {parseMetadata.summary_counts.education || 0} education entries.
+                    </p>
+                    <p className="text-xs text-indigo-300/80 mt-0.5">
+                      {parseMetadata.summary_counts.needs_attention > 0 ? (
+                        <span className="text-amber-300 font-medium">
+                          {parseMetadata.summary_counts.needs_attention} items need your review or confirmation.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-300 font-medium">
+                          Zero hallucinations detected. All details verified against your resume.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Collapsible Details Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen(!detailsOpen)}
+                  className="text-xs px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 flex items-center gap-1.5 transition-all shrink-0"
+                >
+                  <Info className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{detailsOpen ? 'Hide Extraction Details' : 'Extraction Details'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Collapsible Extraction Details Panel */}
+            {detailsOpen && parseMetadata && (
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-slate-300 space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-2.5 rounded-lg bg-black/40 border border-white/5">
+                    <span className="text-slate-400 text-[11px] block">Source Document</span>
+                    <span className="text-white font-medium truncate block mt-0.5">{parseMetadata.filename || 'Uploaded Resume'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-black/40 border border-white/5">
+                    <span className="text-slate-400 text-[11px] block">Raw Text Length</span>
+                    <span className="text-white font-medium block mt-0.5">{parseMetadata.raw_text_length} characters</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-black/40 border border-white/5">
+                    <span className="text-slate-400 text-[11px] block">OCR Fallback Used</span>
+                    <span className="text-white font-medium block mt-0.5">{parseMetadata.ocr_used ? 'Yes (Gemini Vision)' : 'No (Native Text)'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-black/40 border border-white/5">
+                    <span className="text-slate-400 text-[11px] block">Verified Fields</span>
+                    <span className="text-emerald-400 font-medium block mt-0.5">{parseMetadata.summary_counts.verified || 0} fields</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* View Mode Toggle Header */}
             <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -537,7 +653,10 @@ export default function OnboardingPage() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-xs font-medium text-slate-400">Full Name</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">Full Name</label>
+                        {getFieldBadge('contact_info.full_name')}
+                      </div>
                       <input
                         type="text"
                         value={profile.contact_info.full_name || ''}
@@ -547,11 +666,14 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, full_name: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-400">Email Address</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">Email Address</label>
+                        {getFieldBadge('contact_info.email')}
+                      </div>
                       <input
                         type="email"
                         value={profile.contact_info.email || ''}
@@ -561,11 +683,14 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, email: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-400">Phone</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">Phone</label>
+                        {getFieldBadge('contact_info.phone')}
+                      </div>
                       <input
                         type="text"
                         value={profile.contact_info.phone || ''}
@@ -575,11 +700,14 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, phone: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-400">Location</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">Location</label>
+                        {getFieldBadge('contact_info.location')}
+                      </div>
                       <input
                         type="text"
                         value={profile.contact_info.location || ''}
@@ -589,11 +717,14 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, location: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-400">LinkedIn URL</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">LinkedIn URL</label>
+                        {getFieldBadge('contact_info.linkedin')}
+                      </div>
                       <input
                         type="text"
                         value={profile.contact_info.linkedin || ''}
@@ -603,11 +734,14 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, linkedin: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-400">GitHub URL</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-400">GitHub URL</label>
+                        {getFieldBadge('contact_info.github')}
+                      </div>
                       <input
                         type="text"
                         value={profile.contact_info.github || ''}
@@ -617,7 +751,7 @@ export default function OnboardingPage() {
                             contact_info: { ...profile.contact_info, github: e.target.value },
                           })
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -625,10 +759,13 @@ export default function OnboardingPage() {
 
                 {/* 2. Professional Summary Card */}
                 <div className="glass-panel p-6 rounded-2xl space-y-3">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-cyan-400" />
-                    Professional Summary
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-cyan-400" />
+                      Professional Summary
+                    </h3>
+                    {getFieldBadge('summary')}
+                  </div>
                   <textarea
                     rows={3}
                     value={profile.summary || ''}

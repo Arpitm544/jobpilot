@@ -33,10 +33,18 @@ export const metadata = {
 export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#080c14] text-slate-100 selection:bg-indigo-500 selection:text-white overflow-x-hidden">
-      {/* 1. Sticky Navbar */}
+      {/* Accessible Skip to Content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 z-[100] px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold shadow-2xl outline-none ring-2 ring-cyan-400"
+      >
+        Skip to content
+      </a>
+
+      {/* 1. Fixed Navbar */}
       <LandingNavbar />
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1 pt-[var(--nav-height)]">
         {/* 2. Hero Section */}
         <Hero />
 

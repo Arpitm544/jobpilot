@@ -13,7 +13,7 @@ export default function FAQ() {
   };
 
   return (
-    <section id="faq" className="py-20 border-t border-white/5 relative">
+    <section id="faq" className="scroll-mt-[calc(var(--nav-height)+16px)] py-20 border-t border-white/5 relative">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-16">

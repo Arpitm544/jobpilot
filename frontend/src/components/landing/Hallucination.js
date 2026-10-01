@@ -9,7 +9,7 @@ export default function Hallucination() {
   const { comparison } = hallucination;
 
   return (
-    <section id="zero-hallucination" className="py-20 border-t border-white/5 relative overflow-hidden">
+    <section id="zero-hallucination" className="scroll-mt-[calc(var(--nav-height)+16px)] py-20 border-t border-white/5 relative overflow-hidden">
       {/* Background Soft Glow */}
       <div className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl -z-10" />
 

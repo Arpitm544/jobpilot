@@ -57,6 +57,7 @@ class User(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
+    resumes = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
     master_profiles = relationship("MasterProfile", back_populates="user", cascade="all, delete-orphan")
     job_preferences = relationship("JobPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
     question_bank = relationship("QuestionBank", back_populates="user", uselist=False, cascade="all, delete-orphan")

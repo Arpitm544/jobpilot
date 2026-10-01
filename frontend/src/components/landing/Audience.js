@@ -14,7 +14,8 @@ export default function Audience() {
   const { audience } = landingContent;
 
   return (
-    <section id="who-its-for" className="py-20 border-t border-white/5 relative">
+    <section id="audience" className="scroll-mt-[calc(var(--nav-height)+16px)] py-20 border-t border-white/5 relative">
+      <span id="who-its-for" className="scroll-mt-[calc(var(--nav-height)+16px)] absolute top-0" aria-hidden="true" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">

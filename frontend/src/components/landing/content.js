@@ -6,7 +6,7 @@ export const landingContent = {
       { label: "How it works", href: "#how-it-works" },
       { label: "Features", href: "#features" },
       { label: "Zero Hallucination", href: "#zero-hallucination" },
-      { label: "Audience", href: "#who-its-for" },
+      { label: "Audience", href: "#audience" },
       { label: "FAQ", href: "#faq" },
     ],
     cta: {

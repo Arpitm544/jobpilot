@@ -15,7 +15,7 @@ export default function HowItWorks() {
   const { howItWorks } = landingContent;
 
   return (
-    <section id="how-it-works" className="py-20 border-t border-white/5 relative">
+    <section id="how-it-works" className="scroll-mt-[calc(var(--nav-height)+16px)] py-20 border-t border-white/5 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">

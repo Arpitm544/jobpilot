@@ -2,7 +2,9 @@ import urllib.request
 import json
 import sys
 
-def test_url(url, desc):
+__test__ = False
+
+def fetch_url(url, desc):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as res:
@@ -30,11 +32,11 @@ def run_live_e2e():
         ("/dashboard/profile", "Master Profile Management"),
     ]
     for path, desc in routes:
-        html = test_url(f"http://localhost:3000{path}", desc)
+        html = fetch_url(f"http://localhost:3000{path}", desc)
         assert html is not None, f"Frontend route failed: {path}"
 
     print("\n[PHASE 2: BACKEND FASTAPI & DB HEALTH]")
-    health_raw = test_url("http://127.0.0.1:8000/health", "Backend Health Probe")
+    health_raw = fetch_url("http://127.0.0.1:8000/health", "Backend Health Probe")
     assert health_raw is not None
     health_data = json.loads(health_raw)
     assert health_data.get("status") == "healthy"

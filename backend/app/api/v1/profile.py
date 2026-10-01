@@ -129,7 +129,7 @@ async def get_master_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve user's primary Master Profile"""
+    """Retrieve user's primary Master Profile, creating an initial template if none exists yet"""
     result = await db.execute(
         select(MasterProfile).where(
             MasterProfile.user_id == current_user.id,
@@ -138,10 +138,40 @@ async def get_master_profile(
     )
     profile = result.scalar_one_or_none()
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No master profile found. Please upload a resume first."
+        profile = MasterProfile(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            version_name="Primary Master Profile",
+            version=1,
+            is_primary=True,
+            is_active=True,
+            contact_info={
+                "full_name": current_user.full_name or "",
+                "email": current_user.email,
+                "phone": "",
+                "location": "",
+                "linkedin": "",
+                "github": "",
+                "portfolio": ""
+            },
+            summary="",
+            skills={
+                "languages": [],
+                "frameworks": [],
+                "databases": [],
+                "tools": [],
+                "cloud_devops": [],
+                "soft_skills": []
+            },
+            experience=[],
+            projects=[],
+            education=[],
+            certifications=[],
+            links=[]
         )
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
     return profile
 
 
