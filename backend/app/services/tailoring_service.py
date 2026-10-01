@@ -175,6 +175,8 @@ CRITICAL ZERO-HALLUCINATION CONSTRAINTS:
                     tech_stack=proj.get("tech_stack", []),
                     bullets=proj.get("bullets", []),
                     link=proj.get("link", ""),
+                    github_url=proj.get("github_url") or (proj.get("links") or {}).get("github_repo"),
+                    demo_url=proj.get("demo_url") or proj.get("link") or (proj.get("links") or {}).get("live_demo"),
                 ))
 
         cover_letter = (
@@ -317,7 +319,32 @@ Instructions:
         ats_score = round((matched_count / max(1, len(required_skills))) * 100, 1)
         ats_score = max(70.0, min(99.0, ats_score))
 
-        # Step 4: Render 1-Page ATS PDF
+        # Step 4: Enrich projects with github_url and demo_url from master_profile
+        master_projects_map = {}
+        for mp in (master_profile.projects or []):
+            if isinstance(mp, dict):
+                t_key = mp.get("title", "").strip().lower()
+                master_projects_map[t_key] = mp
+
+        enriched_projects = []
+        for p in tailored_payload.tailored_projects:
+            p_dict = p.model_dump()
+            t_key = p_dict.get("title", "").strip().lower()
+            matched_mp = master_projects_map.get(t_key)
+            if not matched_mp:
+                for mk, mv in master_projects_map.items():
+                    if mk in t_key or t_key in mk:
+                        matched_mp = mv
+                        break
+            if matched_mp:
+                if not p_dict.get("github_url"):
+                    p_dict["github_url"] = matched_mp.get("github_url") or (matched_mp.get("links") or {}).get("github_repo")
+                if not p_dict.get("demo_url"):
+                    p_dict["demo_url"] = matched_mp.get("demo_url") or matched_mp.get("link") or (matched_mp.get("links") or {}).get("live_demo")
+            enriched_projects.append(p_dict)
+
+        tailored_payload.tailored_projects = [TailoredProjectItem(**ep) for ep in enriched_projects]
+
         tailored_id = uuid.uuid4()
         pdf_path = await pdf_generator_service.generate_pdf(
             resume_id=tailored_id,
@@ -325,7 +352,7 @@ Instructions:
             summary=tailored_payload.tailored_summary,
             skills=tailored_payload.prioritized_skills or master_profile.skills,
             experience=[e.model_dump() for e in tailored_payload.tailored_experience],
-            projects=[p.model_dump() for p in tailored_payload.tailored_projects],
+            projects=enriched_projects,
             education=master_profile.education
         )
 

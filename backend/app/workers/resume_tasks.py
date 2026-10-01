@@ -195,18 +195,32 @@ def dispatch_resume_parsing(resume_id: str):
         except Exception as e:
             logger.warning(f"Failed to dispatch to Celery worker: {e}. Falling back to background thread.")
 
-    # Background thread fallback ensures parsing runs reliably in dev or offline environments
-    import threading
-    def run_worker_thread():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(async_process_resume(resume_id))
-        except Exception as err:
-            logger.error(f"Error in background worker thread for resume {resume_id}: {err}", exc_info=True)
-        finally:
-            loop.close()
+    # Execute on the running asyncio loop to avoid cross-loop connection pool conflicts
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(async_process_resume(resume_id))
+        logger.info(f"Dispatched resume parsing for {resume_id} to background task on active event loop.")
+    except RuntimeError:
+        # Fallback for synchronous execution (e.g. scripts/Celery)
+        import threading
+        def run_worker_thread():
+            from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+            from sqlalchemy.pool import NullPool
+            thread_engine = create_async_engine(
+                settings.DATABASE_URL,
+                poolclass=NullPool,
+                connect_args={"statement_cache_size": 0, "prepared_statement_cache_size": 0}
+            )
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(async_process_resume(resume_id))
+            except Exception as err:
+                logger.error(f"Error in background worker thread for resume {resume_id}: {err}", exc_info=True)
+            finally:
+                loop.run_until_complete(thread_engine.dispose())
+                loop.close()
 
-    thread = threading.Thread(target=run_worker_thread, daemon=True)
-    thread.start()
-    logger.info(f"Dispatched resume parsing for {resume_id} to background worker thread.")
+        thread = threading.Thread(target=run_worker_thread, daemon=True)
+        thread.start()
+        logger.info(f"Dispatched resume parsing for {resume_id} to isolated background thread.")

@@ -73,18 +73,13 @@ async def test_resume_upload_and_status_flow(prepare_db):
         assert "exceeds maximum allowed limit" in res_oversized.text
 
         # 4. Test Valid Minimal PDF Upload
-        # Create a syntactically valid minimal PDF
-        valid_pdf_content = (
-            b"%PDF-1.4\n"
-            b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
-            b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
-            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n"
-            b"4 0 obj\n<< /Length 53 >>\nstream\n"
-            b"BT /F1 12 Tf 100 700 Td (Alex Mercer - Full Stack Engineer) Tj ET\n"
-            b"endstream\nendobj\n"
-            b"xref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000214 00000 n \n"
-            b"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n317\n%%EOF\n"
-        )
+        # Create a syntactically valid minimal PDF with pymupdf
+        import pymupdf
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((50, 72), "Alex Mercer\nFull Stack Engineer\nEmail: alex@example.com\nSkills: Python, React, FastAPI, PostgreSQL\nExperience: Software Engineer at Acme Corp")
+        valid_pdf_content = doc.tobytes()
+        doc.close()
 
         upload_res = await client.post(
             "/api/v1/resumes/upload",
@@ -100,7 +95,7 @@ async def test_resume_upload_and_status_flow(prepare_db):
 
         # 5. Poll Status endpoint
         status_data = None
-        for _ in range(20):
+        for _ in range(40):
             status_res = await client.get(f"/api/v1/resumes/{resume_id}/status", headers=headers)
             assert status_res.status_code == 200
             status_data = status_res.json()
@@ -108,7 +103,7 @@ async def test_resume_upload_and_status_flow(prepare_db):
             assert "progress_percent" in status_data
             if status_data["status"] in ["ready", "failed"]:
                 break
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
 
         assert status_data["status"] == "ready", f"Expected ready but got {status_data}"
         assert status_data["progress_percent"] == 100

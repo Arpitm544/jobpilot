@@ -158,16 +158,27 @@ export default function ResumeUploader({
   };
 
   const startPolling = (resumeId) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    let isTerminated = false;
 
     const poll = async () => {
+      if (isTerminated) return;
       try {
         const res = await api.get(`/resumes/${resumeId}/status`);
+        if (isTerminated) return;
         const status = res.data;
         setStatusData(status);
 
         if (status.status === 'ready') {
-          clearInterval(pollIntervalRef.current);
+          isTerminated = true;
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
           setPolling(false);
           if (onUploadSuccess) {
             onUploadSuccess({
@@ -177,7 +188,11 @@ export default function ResumeUploader({
             });
           }
         } else if (status.status === 'failed') {
-          clearInterval(pollIntervalRef.current);
+          isTerminated = true;
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
           setPolling(false);
           setErrorMessage(status.error_message || 'Resume parsing failed. Please verify the document or fill manually.');
         }
@@ -187,8 +202,8 @@ export default function ResumeUploader({
       }
     };
 
-    poll();
     pollIntervalRef.current = setInterval(poll, 850);
+    poll();
   };
 
   const handleLoadSample = async () => {

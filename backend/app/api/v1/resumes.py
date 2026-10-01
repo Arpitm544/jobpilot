@@ -85,11 +85,13 @@ async def upload_resume(
         )
         mp_res = await db.execute(mp_stmt)
         mp = mp_res.scalars().first()
-        has_content = mp and (
+        has_content = mp is not None and (
             bool(mp.skills and any(mp.skills.values())) or
             bool(mp.projects) or
             bool(mp.experience) or
-            bool(mp.contact_info and (mp.contact_info.get("location") or mp.contact_info.get("linkedin")))
+            bool(mp.contact_info and any(mp.contact_info.values())) or
+            bool(mp.summary) or
+            bool(mp.raw_extracted_text)
         )
         if has_content:
             return ResumeUploadResponse(

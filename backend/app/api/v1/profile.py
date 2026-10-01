@@ -21,6 +21,7 @@ from app.api.deps import get_current_user
 from app.services.resume_parser import resume_parser_service
 from app.services.resume_verifier import resume_verifier
 from app.services.github_service import github_repo_suggester
+from app.services.gemini_service import gemini_service
 from app.config import settings
 
 router = APIRouter(prefix="/profile", tags=["Profile & Resume"])
@@ -158,6 +159,8 @@ def _normalize_projects_list(projects: List[Any]) -> List[Dict[str, Any]]:
     return normalized
 
 
+@router.get("", response_model=MasterProfileResponse)
+@router.get("/", response_model=MasterProfileResponse)
 @router.get("/master", response_model=MasterProfileResponse)
 async def get_master_profile(
     current_user: User = Depends(get_current_user),
@@ -195,6 +198,7 @@ async def get_master_profile(
                 "databases": [],
                 "tools": [],
                 "cloud_devops": [],
+                "concepts": [],
                 "soft_skills": []
             },
             experience=[],
@@ -214,6 +218,8 @@ async def get_master_profile(
     return profile
 
 
+@router.put("", response_model=MasterProfileResponse)
+@router.put("/", response_model=MasterProfileResponse)
 @router.put("/master", response_model=MasterProfileResponse)
 async def update_master_profile(
     body: MasterProfileUpdate,
@@ -378,5 +384,44 @@ async def get_github_repo_suggestions(
         "repo_count": len(repos),
         "suggestions": suggestions,
         "rate_limit_notice": err_msg if err_msg else None
+    }
+
+
+@router.post("/polish-summary")
+async def polish_professional_summary(
+    payload: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Refines and polishes a professional summary using Gemini AI.
+    Focuses on action verbs, concrete technical expertise, and conciseness.
+    Returns a suggestion that the user can review, accept, or reject.
+    """
+    raw_summary = payload.get("summary", "").strip()
+    if not raw_summary:
+        raise HTTPException(status_code=400, detail="Summary text is required for polishing.")
+
+    system_instruction = (
+        "You are an expert technical career coach and resume strategist. "
+        "Your task is to refine and polish the candidate's professional summary. "
+        "Rules:\n"
+        "1. Keep it concise (2-4 sentences max).\n"
+        "2. Do NOT hallucinate skills, metrics, or years of experience not mentioned or strongly implied.\n"
+        "3. Emphasize engineering mindset, impact, and core technologies mentioned.\n"
+        "4. Tone: Professional, punchy, confident, third-person or first-person implied (no 'I am...').\n"
+        "5. Output ONLY the polished summary text, with no explanations, no greetings, and no markdown quotes."
+    )
+
+    prompt = f"Original Professional Summary:\n{raw_summary}\n\nPlease polish this summary following the instructions."
+
+    polished = await gemini_service.generate_text(prompt, system_instruction=system_instruction)
+    if not polished:
+        # Fallback polish
+        sentences = [s.strip() for s in raw_summary.split(".") if s.strip()]
+        polished = ". ".join(sentences) + "." if sentences else raw_summary
+
+    return {
+        "original": raw_summary,
+        "polished": polished
     }
 

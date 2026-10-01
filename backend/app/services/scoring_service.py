@@ -119,7 +119,12 @@ class ScoringService:
         user_id: uuid.UUID,
         job: Job,
         profile: MasterProfile,
-        preferences: JobPreference
+        preferences: JobPreference,
+        cached_profile_vec: Optional[List[float]] = None,
+        cached_jd_vec: Optional[List[float]] = None,
+        existing_match: Optional[JobMatch] = None,
+        use_ai_parse: bool = False,
+        auto_commit: bool = True
     ) -> JobMatch:
         """
         Calculates Match Score (0 - 100) combining:
@@ -130,7 +135,10 @@ class ScoringService:
         """
         # 1. Parse JD if not already parsed
         if not job.jd_parsed_skills or not job.jd_parsed_skills.get("required_skills"):
-            parsed_jd = await self.parse_jd_with_ai(job.jd_text)
+            if use_ai_parse:
+                parsed_jd = await self.parse_jd_with_ai(job.jd_text)
+            else:
+                parsed_jd = extract_skills_heuristic(job.jd_text)
             job.jd_parsed_skills = parsed_jd.model_dump()
             db.add(job)
         else:
@@ -154,11 +162,20 @@ class ScoringService:
         skill_overlap_ratio = len(matched_skills) / max(1, len(required))
 
         # 3. Embedding Semantic Similarity
-        profile_text = f"{profile.summary or ''} Skills: {', '.join(candidate_skills)}"
-        jd_summary = f"{job.title} at {job.company_name}. Required: {', '.join(required)}. {job.jd_text[:1000]}"
-        
-        vec_profile = await gemini_service.get_embedding(profile_text)
-        vec_jd = await gemini_service.get_embedding(jd_summary)
+        if cached_profile_vec:
+            vec_profile = cached_profile_vec
+        else:
+            profile_text = f"{profile.summary or ''} Skills: {', '.join(candidate_skills)}"
+            vec_profile = await gemini_service.get_embedding(profile_text)
+
+        if cached_jd_vec:
+            vec_jd = cached_jd_vec
+        else:
+            jd_summary = f"{job.title} at {job.company_name}. Required: {', '.join(required)}. {job.jd_text[:1000]}"
+            try:
+                vec_jd = await gemini_service.get_embedding(jd_summary)
+            except Exception:
+                vec_jd = [0.0] * 768
         embedding_sim = cosine_similarity(vec_profile, vec_jd)
 
         # 4. Experience Level Fit
@@ -207,13 +224,16 @@ class ScoringService:
         initial_status = "queued" if final_score >= threshold else "discovered"
 
         # Check existing match
-        match_res = await db.execute(
-            select(JobMatch).where(
-                JobMatch.job_id == job.id,
-                JobMatch.user_id == user_id
+        if existing_match is not None:
+            job_match = existing_match
+        else:
+            match_res = await db.execute(
+                select(JobMatch).where(
+                    JobMatch.job_id == job.id,
+                    JobMatch.user_id == user_id
+                )
             )
-        )
-        job_match = match_res.scalar_one_or_none()
+            job_match = match_res.scalar_one_or_none()
 
         if job_match:
             job_match.match_score = final_score
@@ -240,8 +260,9 @@ class ScoringService:
             )
             db.add(job_match)
 
-        await db.commit()
-        await db.refresh(job_match)
+        if auto_commit:
+            await db.commit()
+            await db.refresh(job_match)
         return job_match
 
 

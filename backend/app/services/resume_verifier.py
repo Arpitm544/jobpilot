@@ -246,13 +246,13 @@ class ResumeVerifier:
         else:
             record_meta("summary", "missing", 0.0)
 
-        # --- 2. Skills Verification ---
         skill_cats = [
             ("languages", profile.skills.languages),
             ("frameworks", profile.skills.frameworks),
             ("databases", profile.skills.databases),
             ("tools", profile.skills.tools),
             ("cloud_devops", profile.skills.cloud_devops),
+            ("concepts", getattr(profile.skills, "concepts", [])),
             ("soft_skills", profile.skills.soft_skills),
         ]
 

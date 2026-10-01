@@ -26,9 +26,27 @@ import {
   Zap,
   Check,
   Ban,
-  FileCheck
+  FileCheck,
+  FileText
 } from 'lucide-react';
 import TailorModal from '@/components/tailor/TailorModal';
+
+function formatJdSnippet(rawText) {
+  if (!rawText) return 'No job description provided.';
+  let text = String(rawText)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\ufffd/g, "'");
+  // Strip any remaining HTML tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  // Collapse whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
 
 export default function JobsPage() {
   const { user } = useAuth();
@@ -514,13 +532,28 @@ export default function JobsPage() {
                       </div>
 
                       {/* JD Snippet Preview */}
-                      <div className="pt-2">
-                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                          Job Description Snippet:
-                        </span>
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-3 leading-relaxed">
-                          {m.job.jd_text}
-                        </p>
+                      <div className="pt-3 border-t border-white/5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                            Job Description Overview:
+                          </span>
+                          {m.job?.apply_url && (
+                            <a
+                              href={m.job.apply_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              Official Posting <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950/40 border border-white/5 text-xs text-slate-300 leading-relaxed font-normal">
+                          <p className="line-clamp-3">
+                            {formatJdSnippet(m.job.jd_text)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}

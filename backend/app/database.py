@@ -8,18 +8,33 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Determine database engine URL
+# Determine database engine URL and connection parameters
 db_url = settings.DATABASE_URL
 connect_args = {}
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
 if "sqlite" in db_url:
     connect_args = {"check_same_thread": False}
+    engine_kwargs["poolclass"] = NullPool
+else:
+    # Essential for Neon PgBouncer transaction pooler
+    connect_args = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "command_timeout": 60,
+    }
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 10
 
 engine = create_async_engine(
     db_url,
-    echo=False,
-    future=True,
-    poolclass=NullPool,
-    connect_args=connect_args
+    connect_args=connect_args,
+    **engine_kwargs
 )
 
 AsyncSessionLocal = async_sessionmaker(

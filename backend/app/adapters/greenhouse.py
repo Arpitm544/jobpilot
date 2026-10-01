@@ -11,15 +11,22 @@ logger = logging.getLogger(__name__)
 
 
 def clean_html(html_content: str) -> str:
-    """Strips HTML tags to plain text while preserving paragraph breaks"""
+    """Strips HTML tags to clean plain text, unescapes entities, and normalizes typography"""
     if not html_content:
         return ""
+    import html as html_lib
+    content = html_lib.unescape(html_content)
+    if "&lt;" in content or "&gt;" in content or "&amp;" in content:
+        content = html_lib.unescape(content)
+    content = content.replace("\ufffd", "'").replace("â€™", "'").replace("â€œ", '"').replace("â€", '"').replace("â€”", "—")
     try:
-        soup = BeautifulSoup(html_content, "html.parser")
-        return soup.get_text(separator="\n\n").strip()
+        soup = BeautifulSoup(content, "html.parser")
+        text = soup.get_text(separator="\n\n").strip()
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
     except Exception:
-        # Regex fallback
-        return re.sub(r"<[^>]+>", "\n", html_content).strip()
+        text = re.sub(r"<[^>]+>", "\n", content).strip()
+        return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def detect_workplace_type(title: str, location: str, content: str) -> str:
@@ -42,7 +49,7 @@ class GreenhouseAdapter(BaseATSAdapter):
         normalized_jobs: List[Dict[str, Any]] = []
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.get(url)
                 if res.status_code == 404:
                     logger.warning(f"Greenhouse board '{company_identifier}' not found.")
