@@ -1,0 +1,69 @@
+{
+  "code": "SG",
+  "name": "Singapore",
+  "currency": {
+    "code": "SGD",
+    "symbol": "S$",
+    "salary_unit_annual": "SGD/year",
+    "salary_unit_stipend": "per month",
+    "stipend_period_default": "monthly"
+  },
+  "cities": [
+    "Singapore"
+  ],
+  "timezones": [
+    "Asia/Singapore"
+  ],
+  "phone_prefix": "+65",
+  "date_format": "DD/MM/YYYY",
+  "local_sources": [
+    {
+      "id": "mycareersfuture",
+      "name": "MyCareersFuture",
+      "type": "government",
+      "terms_restricted": false,
+      "description": "Singapore national jobs portal"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "jobstreet_sg",
+      "name": "JobStreet Singapore",
+      "type": "aggregator",
+      "terms_restricted": false,
+      "description": "Southeast Asia job portal"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    }
+  ],
+  "internship_keywords": [
+    "intern",
+    "internship",
+    "undergraduate intern",
+    "student intern",
+    "trainee"
+  ],
+  "fresher_keywords": [
+    "fresh graduate",
+    "junior software engineer",
+    "management associate"
+  ],
+  "language_codes": ["en"]
+}

@@ -45,19 +45,39 @@ class GreenhouseAdapter(BaseATSAdapter):
     BASE_URL = "https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true"
 
     async def fetch_jobs(self, company_identifier: str) -> List[Dict[str, Any]]:
-        url = self.BASE_URL.format(board_token=company_identifier.lower().strip())
+        board_token = company_identifier.lower().strip()
+        url = self.BASE_URL.format(board_token=board_token)
         normalized_jobs: List[Dict[str, Any]] = []
 
+        data = None
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 res = await client.get(url)
+                if res.status_code == 404:
+                    # Check European endpoint
+                    res = await client.get(f"https://boards-api.eu.greenhouse.io/v1/boards/{board_token}/jobs?content=true")
                 if res.status_code == 404:
                     logger.warning(f"Greenhouse board '{company_identifier}' not found.")
                     return []
                 res.raise_for_status()
                 data = res.json()
+        except httpx.TimeoutException:
+            # Fallback to lightweight endpoint without full content
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get(f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs")
+                    if res.status_code == 404:
+                        res = await client.get(f"https://boards-api.eu.greenhouse.io/v1/boards/{board_token}/jobs")
+                    res.raise_for_status()
+                    data = res.json()
+            except Exception as e2:
+                logger.error(f"Greenhouse lightweight fallback failed for '{company_identifier}': {e2}")
+                return []
         except Exception as e:
             logger.error(f"Error fetching Greenhouse jobs for '{company_identifier}': {e}")
+            return []
+
+        if not data or not isinstance(data, dict):
             return []
 
         jobs_list = data.get("jobs", [])
@@ -92,9 +112,25 @@ class GreenhouseAdapter(BaseATSAdapter):
             salary_match = re.search(r"(\$\d{2,3}(?:,\d{3})*(?:\s*-\s*\$\d{2,3}(?:,\d{3})*)?)", jd_text)
             salary_range = salary_match.group(1) if salary_match else None
 
+            COMPANY_DISPLAY_NAMES = {
+                "razorpaysoftwareprivatelimited": "Razorpay",
+                "groww": "Groww",
+                "slice": "Slice",
+                "hackerrank": "HackerRank",
+                "canonical": "Canonical",
+                "cloudflare": "Cloudflare",
+                "gitlab": "GitLab",
+                "figma": "Figma",
+                "stripe": "Stripe",
+            }
+            company_display = COMPANY_DISPLAY_NAMES.get(
+                company_identifier.lower().strip(),
+                company_identifier.replace("-", " ").title()
+            )
+
             normalized_jobs.append({
                 "external_id": job_id,
-                "company_name": company_identifier.replace("-", " ").title(),
+                "company_name": company_display,
                 "title": title,
                 "location": location_str or "Remote",
                 "workplace_type": workplace_type,

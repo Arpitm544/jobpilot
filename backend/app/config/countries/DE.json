@@ -1,0 +1,95 @@
+{
+  "code": "DE",
+  "name": "Germany",
+  "currency": {
+    "code": "EUR",
+    "symbol": "€",
+    "salary_unit_annual": "EUR/year",
+    "salary_unit_stipend": "per month",
+    "stipend_period_default": "monthly"
+  },
+  "cities": [
+    "Berlin",
+    "Munich",
+    "Frankfurt",
+    "Hamburg",
+    "Cologne",
+    "Stuttgart",
+    "Düsseldorf"
+  ],
+  "timezones": [
+    "Europe/Berlin"
+  ],
+  "phone_prefix": "+49",
+  "date_format": "DD.MM.YYYY",
+  "local_sources": [
+    {
+      "id": "stepstone_de",
+      "name": "StepStone Germany",
+      "type": "aggregator",
+      "terms_restricted": false,
+      "description": "Leading job portal in Germany"
+    },
+    {
+      "id": "xing",
+      "name": "XING",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "DACH professional network"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "ashby",
+      "name": "Ashby",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Next-gen tech company ATS job boards"
+    },
+    {
+      "id": "workable",
+      "name": "Workable",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Global recruitment platform and ATS feeds"
+    }
+  ],
+  "internship_keywords": [
+    "praktikum",
+    "werkstudent",
+    "praktikant",
+    "working student",
+    "intern",
+    "internship",
+    "ausbildung",
+    "trainee",
+    "werkstudententätigkeit"
+  ],
+  "fresher_keywords": [
+    "berufseinsteiger",
+    "junior softwareentwickler",
+    "traineeprogramm",
+    "absolvent",
+    "entry level"
+  ],
+  "language_codes": ["de", "en"]
+}

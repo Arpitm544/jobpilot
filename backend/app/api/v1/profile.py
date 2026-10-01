@@ -308,8 +308,27 @@ async def update_question_bank(
         )
         db.add(qb)
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data_dict = body.model_dump(exclude_unset=True)
+    for field, value in data_dict.items():
         setattr(qb, field, value)
+
+    # Sync country and location preferences to User
+    if "home_country" in data_dict and data_dict["home_country"]:
+        current_user.home_country = data_dict["home_country"].strip().upper()
+    if "home_city" in data_dict:
+        current_user.home_city = data_dict["home_city"]
+    if "preferred_cities" in data_dict:
+        current_user.preferred_cities = data_dict["preferred_cities"]
+    if "citizenship" in data_dict:
+        current_user.citizenship = data_dict["citizenship"]
+    if "work_authorization_countries" in data_dict:
+        current_user.work_authorization_countries = data_dict["work_authorization_countries"]
+    if "needs_sponsorship" in data_dict:
+        current_user.needs_visa_sponsorship = data_dict["needs_sponsorship"]
+    if "willing_to_relocate" in data_dict:
+        current_user.willing_to_relocate = data_dict["willing_to_relocate"]
+    if "open_to_international" in data_dict:
+        current_user.open_to_international = data_dict["open_to_international"]
 
     # Persist last_completed_step server-side (Step 4 completed)
     current_user.last_completed_step = max(current_user.last_completed_step or 0, 4)

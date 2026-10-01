@@ -49,6 +49,14 @@ class QuestionBank(Base):
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     user_id = Column(GUID(), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
     
+    # Location & country questions
+    home_country = Column(String(2), default="IN", nullable=True)
+    home_city = Column(String(100), nullable=True)
+    preferred_cities = Column(JSON, default=list, nullable=False)
+    citizenship = Column(String(2), nullable=True)
+    work_authorization_countries = Column(JSON, default=list, nullable=False)
+    open_to_international = Column(Boolean, default=False, nullable=False)
+
     # Common questions
     work_authorization = Column(String(100), default="Authorized to work in country", nullable=True)
     needs_sponsorship = Column(Boolean, default=False, nullable=False)

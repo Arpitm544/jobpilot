@@ -1,0 +1,85 @@
+{
+  "code": "CA",
+  "name": "Canada",
+  "currency": {
+    "code": "CAD",
+    "symbol": "C$",
+    "salary_unit_annual": "CAD/year",
+    "salary_unit_stipend": "per hour",
+    "stipend_period_default": "hourly"
+  },
+  "cities": [
+    "Toronto",
+    "Vancouver",
+    "Montreal",
+    "Ottawa",
+    "Calgary",
+    "Waterloo",
+    "Edmonton"
+  ],
+  "timezones": [
+    "America/Toronto",
+    "America/Vancouver",
+    "America/Edmonton"
+  ],
+  "phone_prefix": "+1",
+  "date_format": "YYYY-MM-DD",
+  "local_sources": [
+    {
+      "id": "indeed_ca",
+      "name": "Indeed Canada",
+      "type": "aggregator",
+      "terms_restricted": true,
+      "description": "Canadian employment platform"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "wellfound",
+      "name": "Wellfound",
+      "type": "startup",
+      "terms_restricted": false,
+      "description": "Startup job board"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "ashby",
+      "name": "Ashby",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Next-gen tech company ATS job boards"
+    }
+  ],
+  "internship_keywords": [
+    "intern",
+    "internship",
+    "co-op",
+    "summer intern",
+    "student intern",
+    "stage"
+  ],
+  "fresher_keywords": [
+    "new grad",
+    "junior software developer",
+    "entry level"
+  ],
+  "language_codes": ["en", "fr"]
+}

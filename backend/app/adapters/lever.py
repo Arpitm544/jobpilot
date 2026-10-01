@@ -38,7 +38,7 @@ class LeverAdapter(BaseATSAdapter):
         normalized_jobs: List[Dict[str, Any]] = []
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 res = await client.get(url)
                 if res.status_code == 404:
                     logger.warning(f"Lever board '{company_identifier}' not found.")
@@ -94,9 +94,20 @@ class LeverAdapter(BaseATSAdapter):
             if salary_match:
                 salary_range = salary_match.group(1)
 
+            COMPANY_DISPLAY_NAMES = {
+                "cred": "CRED",
+                "spotify": "Spotify",
+                "netflix": "Netflix",
+                "palantir": "Palantir",
+            }
+            company_display = COMPANY_DISPLAY_NAMES.get(
+                company_identifier.lower().strip(),
+                company_identifier.replace("-", " ").title()
+            )
+
             normalized_jobs.append({
                 "external_id": job_id,
-                "company_name": company_identifier.replace("-", " ").title(),
+                "company_name": company_display,
                 "title": title,
                 "location": location_str,
                 "workplace_type": workplace_type.title(),

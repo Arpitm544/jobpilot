@@ -1,0 +1,140 @@
+{
+  "code": "IN",
+  "name": "India",
+  "currency": {
+    "code": "INR",
+    "symbol": "₹",
+    "salary_unit_annual": "LPA",
+    "salary_unit_stipend": "per month",
+    "stipend_period_default": "monthly"
+  },
+  "cities": [
+    "Bengaluru",
+    "Hyderabad",
+    "Pune",
+    "Mumbai",
+    "Delhi-NCR",
+    "Gurgaon",
+    "Noida",
+    "Chennai",
+    "Kolkata",
+    "Ahmedabad",
+    "Kochi",
+    "Jaipur",
+    "Chandigarh",
+    "Indore"
+  ],
+  "timezones": [
+    "Asia/Kolkata"
+  ],
+  "phone_prefix": "+91",
+  "date_format": "DD/MM/YYYY",
+  "local_sources": [
+    {
+      "id": "internshala",
+      "name": "Internshala",
+      "type": "internship_native",
+      "terms_restricted": false,
+      "description": "India's leading internship platform with native internship listings"
+    },
+    {
+      "id": "naukri",
+      "name": "Naukri",
+      "type": "aggregator",
+      "terms_restricted": true,
+      "description": "Premier Indian professional job portal"
+    },
+    {
+      "id": "instahyre",
+      "name": "Instahyre",
+      "type": "direct",
+      "terms_restricted": false,
+      "description": "Tech-focused talent matching in India"
+    },
+    {
+      "id": "wellfound",
+      "name": "Wellfound",
+      "type": "startup",
+      "terms_restricted": false,
+      "description": "Global startup and high-growth venture job board"
+    },
+    {
+      "id": "cutshort",
+      "name": "Cutshort",
+      "type": "direct",
+      "terms_restricted": false,
+      "description": "AI-powered recruitment network in India"
+    },
+    {
+      "id": "foundit",
+      "name": "Foundit",
+      "type": "aggregator",
+      "terms_restricted": false,
+      "description": "APAC & India employment platform (formerly Monster India)"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "type": "social_board",
+      "terms_restricted": true,
+      "description": "Global professional network"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Official company ATS job boards"
+    },
+    {
+      "id": "ashby",
+      "name": "Ashby",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Next-gen tech company ATS job boards"
+    },
+    {
+      "id": "workable",
+      "name": "Workable",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Global recruitment platform and ATS feeds"
+    },
+    {
+      "id": "smartrecruiters",
+      "name": "SmartRecruiters",
+      "type": "ats",
+      "terms_restricted": false,
+      "description": "Enterprise recruiting ATS feeds"
+    }
+  ],
+  "internship_keywords": [
+    "intern",
+    "internship",
+    "summer intern",
+    "winter intern",
+    "trainee",
+    "graduate trainee",
+    "industrial training",
+    "apprentice",
+    "apprenticeship",
+    "student trainee",
+    "ppo"
+  ],
+  "fresher_keywords": [
+    "fresher",
+    "graduate engineer trainee",
+    "get",
+    "entry level",
+    "associate software engineer",
+    "junior developer"
+  ],
+  "language_codes": ["en", "hi"]
+}

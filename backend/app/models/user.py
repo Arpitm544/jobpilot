@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, DateTime, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator, CHAR
@@ -54,6 +54,19 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     last_completed_step = Column(Integer, default=0, nullable=True)
+
+    # Location & Remote Work Authorization (Country-aware discovery)
+    home_country = Column(String(2), default="IN", nullable=True)  # ISO-3166-1 alpha-2, e.g. "IN"
+    home_city = Column(String(100), nullable=True)
+    preferred_cities = Column(JSON, default=list, nullable=False)  # ["Bengaluru", "Pune"]
+    timezone = Column(String(100), default="Asia/Kolkata", nullable=True)
+    citizenship = Column(String(2), nullable=True)  # ISO-3166-1 alpha-2, e.g. "IN"
+    work_authorization_countries = Column(JSON, default=list, nullable=False)  # ["IN"]
+    needs_visa_sponsorship = Column(Boolean, default=False, nullable=False)
+    willing_to_relocate = Column(Boolean, default=False, nullable=False)
+    open_to_international = Column(Boolean, default=False, nullable=False)
+    per_country_sources = Column(JSON, default=dict, nullable=False)  # {"IN": ["internshala", "naukri"]}
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 

@@ -66,3 +66,16 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_optional_current_user(
+    request: Request,
+    bearer_token: Optional[str] = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    """Returns authenticated user if present in cookies or bearer, otherwise None."""
+    try:
+        return await get_current_user(request=request, bearer_token=bearer_token, db=db)
+    except HTTPException:
+        return None
+

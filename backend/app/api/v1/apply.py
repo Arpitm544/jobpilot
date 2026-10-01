@@ -126,14 +126,17 @@ async def get_pipeline_board(
     )
     applications = app_res.scalars().all()
 
-    # 2. Fetch all job matches
+    # 2. Fetch all job matches (dismissed ones are permanently hidden)
     match_res = await db.execute(
         select(JobMatch)
         .options(
             selectinload(JobMatch.job),
             selectinload(JobMatch.tailored_resume)
         )
-        .where(JobMatch.user_id == current_user.id)
+        .where(
+            JobMatch.user_id == current_user.id,
+            JobMatch.status != "dismissed"
+        )
         .order_by(desc(JobMatch.match_score))
     )
     matches = match_res.scalars().all()
@@ -150,7 +153,7 @@ async def get_pipeline_board(
         "rejected": [],
     }
 
-    # Map applied job IDs
+    # Map applied job IDs — applied/rejected jobs must NEVER reappear in discovered/queued
     applied_job_ids = set()
     for app in applications:
         applied_job_ids.add(app.job_id)
@@ -176,32 +179,106 @@ async def get_pipeline_board(
         else:
             pipeline["applied"].append(item)
 
-    # Add matches that haven't been staged into an application yet
+    # Add matches not yet staged as applications (applied jobs are permanently hidden)
     for m in matches:
-        if m.job_id not in applied_job_ids:
-            item = {
-                "match_id": str(m.id),
-                "job_id": str(m.job.id),
-                "title": m.job.title,
-                "company_name": m.job.company_name,
-                "location": m.job.location,
-                "workplace_type": m.job.workplace_type,
-                "ats_type": m.job.ats_type,
-                "apply_url": m.job.apply_url,
-                "match_score": m.match_score,
-                "status": m.status,
-                "has_proof": False,
-                "tailored_resume_id": str(m.tailored_resume.id) if m.tailored_resume else None,
-                "evaluated_at": m.evaluated_at.isoformat(),
-            }
-            if m.status in pipeline:
-                pipeline[m.status].append(item)
-            elif m.status == "tailored":
-                pipeline["tailored"].append(item)
-            else:
-                pipeline["discovered"].append(item)
+        if m.job_id in applied_job_ids:
+            continue  # Already applied to this job — never reappear
+        item = {
+            "match_id": str(m.id),
+            "job_id": str(m.job.id),
+            "title": m.job.title,
+            "company_name": m.job.company_name,
+            "location": m.job.location,
+            "workplace_type": m.job.workplace_type,
+            "ats_type": m.job.ats_type,
+            "apply_url": m.job.apply_url,
+            "match_score": m.match_score,
+            "status": m.status,
+            "has_proof": False,
+            "tailored_resume_id": str(m.tailored_resume.id) if m.tailored_resume else None,
+            "evaluated_at": m.evaluated_at.isoformat(),
+        }
+        if m.status in pipeline:
+            pipeline[m.status].append(item)
+        elif m.status == "tailored":
+            pipeline["tailored"].append(item)
+        else:
+            pipeline["discovered"].append(item)
 
     return pipeline
+
+
+@router.delete("/match/{match_id}")
+async def delete_job_match(
+    match_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently removes a job match from the pipeline (marks as dismissed).
+    Dismissed jobs never reappear in any pipeline view.
+    """
+    result = await db.execute(
+        select(JobMatch).where(JobMatch.id == match_id, JobMatch.user_id == current_user.id)
+    )
+    match = result.scalar_one_or_none()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job match not found")
+
+    match.status = "dismissed"
+    await db.commit()
+    return {"success": True, "match_id": str(match_id), "message": "Job removed from pipeline"}
+
+
+@router.delete("/application/{application_id}")
+async def delete_application(
+    application_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Removes a pre-submission application from the pipeline (marks as rejected).
+    Cannot delete already-submitted applications.
+    """
+    result = await db.execute(
+        select(Application).where(Application.id == application_id, Application.user_id == current_user.id)
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if application.status in ["applied", "interview", "offer"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a submitted application. Archive it instead."
+        )
+
+    application.status = "rejected"
+    await db.commit()
+    return {"success": True, "application_id": str(application_id), "message": "Application removed from pipeline"}
+
+
+class DailyCapRequest(BaseModel):
+    daily_cap: int
+
+
+@router.post("/daily-cap")
+async def update_daily_cap(
+    request: DailyCapRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates the user's daily application cap (range: 1-50)."""
+    cap = max(1, min(50, request.daily_cap))
+    pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
+    prefs = pref_res.scalar_one_or_none()
+    if not prefs:
+        prefs = JobPreference(user_id=current_user.id, daily_cap=cap)
+        db.add(prefs)
+    else:
+        prefs.daily_cap = cap
+    await db.commit()
+    return {"daily_cap": cap, "message": f"Daily cap updated to {cap} applications/day"}
 
 
 @router.get("/{application_id}/screenshot")

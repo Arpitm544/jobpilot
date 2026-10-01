@@ -146,3 +146,45 @@ python tests/test_e2e_browser_flows.py
 
 All test screenshots and JSON test telemetry logs are saved to `logs/screenshots/` and `logs/phase1_browser_results.json`.
 
+---
+
+## 🌍 Country-Aware Discovery, Remote Eligibility & Strict Internship Mode
+
+JobPilot provides an enterprise-grade discovery pipeline designed to deliver geographically relevant jobs, evaluate remote & visa eligibility without hallucinations, and accurately classify internships and fresher roles across multiple global markets (`IN`, `US`, `GB`, `DE`, `CA`, `SG`).
+
+### 1. Home-Country-First Feed & Ranking
+- **Personalized Geography**: Candidate profile records `home_country`, `home_city`, `preferred_cities`, `citizenship`, `work_authorization_countries`, and relocation/sponsorship flags.
+- **5-Tier Feed Ranking**:
+  1. **Tier 1 (Home Country Preferred City)**: On-site/hybrid roles in user's specified preferred cities.
+  2. **Tier 2 (Home Country Other Cities)**: On-site/hybrid roles anywhere within the user's home country.
+  3. **Tier 3 (Home Country Remote)**: Remote roles scoped to the user's home country or worldwide.
+  4. **Tier 4 (Eligible International Remote)**: International remote roles where the candidate is verified as eligible.
+  5. **Tier 5 (International Relocation / Ineligible Remote)**: International roles offering visa sponsorship or requiring user relocation.
+- **80/20 Feed Mix**: In feeds with abundant domestic listings, rankings interleave **80% home-country** positions with **20% verified eligible international remote** listings.
+
+### 2. Remote Eligibility Engine (Zero-Hallucination)
+- **Hierarchical Signal Priority**:
+  1. *Structured ATS / Location Fields* (`country`, `allowed_countries`, `excluded_countries`, `remote_scope`).
+  2. *Verified Job Description Constraints* (Regex rules with negative lookbehinds for visa sponsorship and geo-restrictions).
+  3. *Public Company Hiring Policy Pages* (Cached 14 days, with Deel/Remote.com EOR entity detection).
+  4. *Candidate Profile Evaluation* (Cross-checking citizenship, work authorization countries, and relocation willingness).
+- **Strict Evidence Standard**: Every quote presented in the eligibility modal must be **verbatim from the JD text** (`quote.lower() in jd_text.lower()`) or derived directly from structured ATS fields. Unverified LLM assertions are discarded.
+- **Recruiter Overrides**: If a candidate confirms remote eligibility with a recruiter, they can log an override with notes and recruiter contact details. This permanently updates their view and records an audit log.
+- **Auto-Apply Safety Rule**: The auto-apply queue **strictly admits `eligible` or `likely_eligible`** jobs. Postings categorized as `unclear`, `likely_not_eligible`, or `not_eligible` are completely blocked from automated submission.
+
+### 3. Strict Internship Mode & Multi-Currency Normalization
+- **Multilingual Regex & Semantic Classification**:
+  - Distinguishes internships, working student roles (`Werkstudent`, `Praktikum`), co-ops, and apprenticeships.
+  - Hard guards against false positives like `"Senior Engineer (mentors interns)"`, `"International Sales Manager"`, and generic words (`internal`, `internet`).
+  - Separates entry-level full-time roles into a distinct `fresher_full_time` class (e.g. *Graduate Trainee Engineer*), accessible via the "Include Fresher" toggle.
+  - Borderline listings (confidence 0.60–0.79) are quarantined into a collapsible **"Maybe Internships"** section.
+- **Stipend Normalizer**: Normalizes hourly, weekly, monthly, and lump-sum stipends across currencies (INR ₹, USD $, EUR €, GBP £, CAD $) into the candidate's home monthly currency equivalent using ISO-3166 exchange baselines.
+
+### 4. Running Acceptance Tests
+```bash
+cd backend
+python -m pytest tests/test_country_aware_fixtures_e2e.py -v
+```
+All 8 acceptance scenarios (India default feed, remote worldwide/APAC, 5 country personas, strict internship exclusions, stipend normalization, zero-hallucination quote verifier, inputs_hash cache invalidation, and auto-apply queue safety) are continuously validated.
+
+
