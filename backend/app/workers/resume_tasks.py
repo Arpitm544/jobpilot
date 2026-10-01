@@ -166,32 +166,44 @@ def dispatch_resume_parsing(resume_id: str):
     """
     from app.config import settings
     import socket
+    from urllib.parse import urlparse
 
-    # Quick socket probe to check if Redis broker is reachable without blocking
     redis_available = False
     try:
-        host = settings.REDIS_HOST
-        port = settings.REDIS_PORT
+        redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
+        parsed = urlparse(redis_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 6379
         with socket.create_connection((host, port), timeout=0.5):
             redis_available = True
-    except (socket.timeout, ConnectionRefusedError, OSError):
+    except Exception as e:
+        logger.debug(f"Redis probe failed ({e}); will use background worker thread.")
         redis_available = False
 
     if redis_available:
         try:
-            process_resume_parsing.delay(resume_id)
-            logger.info(f"Dispatched resume parsing for {resume_id} to Celery worker.")
-            return
+            # Check if Celery has any active worker before enqueueing to Redis
+            from app.workers.celery_app import celery_app
+            insp = celery_app.control.inspect(timeout=0.5)
+            active_workers = insp.ping() if insp else None
+            if active_workers:
+                process_resume_parsing.delay(resume_id)
+                logger.info(f"Dispatched resume parsing for {resume_id} to active Celery worker.")
+                return
+            else:
+                logger.info("Redis is up but no active Celery workers found. Executing in background thread.")
         except Exception as e:
-            logger.warning(f"Failed to dispatch to Celery broker: {e}. Falling back to background thread.")
+            logger.warning(f"Failed to dispatch to Celery worker: {e}. Falling back to background thread.")
 
-    # Background thread fallback ensures parsing runs even if Celery/Redis daemon is offline
+    # Background thread fallback ensures parsing runs reliably in dev or offline environments
     import threading
     def run_worker_thread():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(async_process_resume(resume_id))
+        except Exception as err:
+            logger.error(f"Error in background worker thread for resume {resume_id}: {err}", exc_info=True)
         finally:
             loop.close()
 

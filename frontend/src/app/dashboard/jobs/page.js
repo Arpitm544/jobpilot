@@ -218,9 +218,19 @@ export default function JobsPage() {
           </div>
         )}
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {(error.toLowerCase().includes('profile') || error.toLowerCase().includes('resume')) && (
+              <Link
+                href="/onboarding"
+                className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-semibold text-[11px] whitespace-nowrap transition-colors flex items-center gap-1"
+              >
+                Upload Resume / Setup Profile &rarr;
+              </Link>
+            )}
           </div>
         )}
 

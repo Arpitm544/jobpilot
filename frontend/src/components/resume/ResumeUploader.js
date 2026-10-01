@@ -306,7 +306,7 @@ export default function ResumeUploader({
 
             {/* Sample Resume and Manual Fallback */}
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800/80 text-xs">
-              {sampleResumeText && (
+              {sampleResumeText && process.env.NODE_ENV === 'development' && (
                 <button
                   type="button"
                   onClick={handleLoadSample}

@@ -57,7 +57,7 @@ async def async_apply_job(
 
         # 2. Daily Application Quota Check
         now = datetime.now(timezone.utc)
-        start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        start_of_day = datetime(now.year, now.month, now.day)
         
         count_res = await db.execute(
             select(func.count(Application.id))

@@ -302,14 +302,34 @@ async def get_parsed_resume(
         else:
             cleaned_contact[k] = v
 
+    raw_projects = profile.projects if profile else []
+    cleaned_projects = []
+    for p in raw_projects:
+        p_dict = dict(p) if isinstance(p, dict) else (p.model_dump() if hasattr(p, "model_dump") else {})
+        links = p_dict.get("links") or {}
+        gh = p_dict.get("github_url") or links.get("github_repo")
+        demo = p_dict.get("demo_url") or links.get("live_demo")
+        raw_link = p_dict.get("link")
+        if raw_link:
+            if "github.com" in str(raw_link) and not gh:
+                gh = raw_link
+            elif "github.com" not in str(raw_link) and not demo:
+                demo = raw_link
+        p_dict["github_url"] = gh
+        p_dict["demo_url"] = demo
+        p_dict["link"] = demo or gh or raw_link
+        p_dict["links"] = {"github_repo": gh, "live_demo": demo}
+        cleaned_projects.append(p_dict)
+
     profile_data = {
         "contact_info": cleaned_contact,
         "summary": profile.summary if profile else "",
         "skills": profile.skills if profile else {"languages": [], "frameworks": [], "databases": [], "tools": [], "cloud_devops": [], "soft_skills": []},
         "experience": profile.experience if profile else [],
-        "projects": profile.projects if profile else [],
+        "projects": cleaned_projects,
         "education": profile.education if profile else [],
         "certifications": profile.certifications if profile else [],
+        "achievements": getattr(profile, "achievements", []) if profile else [],
         "links": profile.links if profile else [],
     }
 
@@ -361,3 +381,39 @@ async def retry_resume_parsing(
     dispatch_resume_parsing(str(resume.id))
 
     return {"message": "Parsing retried", "status": ResumeStatus.QUEUED.value}
+
+
+@router.get("/{resume_id}/download")
+async def download_resume(
+    resume_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Download / view the user's uploaded resume file"""
+    stmt = select(Resume).where(
+        Resume.id == resume_id,
+        Resume.user_id == current_user.id
+    )
+    res = await db.execute(stmt)
+    resume = res.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
+
+    file_bytes = storage_service.get_resume_bytes(resume.storage_path)
+    if not file_bytes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume file not found on disk.")
+
+    media_type = "application/pdf"
+    if resume.filename.lower().endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif resume.filename.lower().endswith(".txt"):
+        media_type = "text/plain"
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{resume.filename}"'
+        }
+    )
+

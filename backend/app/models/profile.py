@@ -27,6 +27,7 @@ class MasterProfile(Base):
     projects = Column(JSON, default=list, nullable=False)      # [{title, role, description, tech_stack: [], bullets: [], link: ""}]
     education = Column(JSON, default=list, nullable=False)     # [{institution, degree, field_of_study, start_year, end_year, gpa}]
     certifications = Column(JSON, default=list, nullable=False)# [{name, issuer, date, url}]
+    achievements = Column(JSON, default=list, nullable=False)  # [{title, description, date}]
     links = Column(JSON, default=list, nullable=False)         # [{label, url}]
     
     original_filename = Column(String(255), nullable=True)

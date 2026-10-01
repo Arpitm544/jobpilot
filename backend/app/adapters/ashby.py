@@ -60,8 +60,12 @@ class AshbyAdapter(BaseATSAdapter):
             if pub_date_str:
                 try:
                     posted_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                    if posted_date.tzinfo is not None:
+                        posted_date = posted_date.astimezone(timezone.utc).replace(tzinfo=None)
                 except Exception:
-                    posted_date = datetime.now(timezone.utc)
+                    posted_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            else:
+                posted_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Compensation
             comp = item.get("compensation", {})

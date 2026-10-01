@@ -27,7 +27,19 @@ import {
   MapPin,
   DollarSign,
   User,
-  Info
+  Info,
+  GraduationCap,
+  FolderGit2,
+  Award,
+  Trophy,
+  ChevronUp,
+  ChevronDown,
+  ExternalLink,
+  Github,
+  X,
+  Download,
+  RefreshCw,
+  FileCheck
 } from 'lucide-react';
 
 const SAMPLE_RESUME_TEXT = `Alex Mercer
@@ -73,24 +85,39 @@ export default function OnboardingPage() {
   const [accountFallbackFields, setAccountFallbackFields] = useState({});
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  // Step 1: Resume File
+  // Step 1: Resume & Onboarding Server State
   const [selectedFile, setSelectedFile] = useState(null);
   const [activeResumeId, setActiveResumeId] = useState(null);
+  const [onboardingState, setOnboardingState] = useState(null);
+  const [stateLoading, setStateLoading] = useState(true);
+  const [stateError, setStateError] = useState(false);
+  const [forceShowUploader, setForceShowUploader] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [incomingProfile, setIncomingProfile] = useState(null);
+
+  // Strict sanitization helper: cleans null, undefined, "null", "undefined" to empty string
+  const cleanStr = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val).trim();
+    if (str === 'null' || str === 'undefined') return '';
+    return str;
+  };
 
   // Mapper function ensuring consistent snake_case schema from API to frontend form
   const mapApiProfileToForm = (apiProfile, currentUser = null) => {
     const contact = apiProfile?.contact_info || {};
     const fallbacks = {};
 
-    let fullName = contact.full_name || '';
+    let fullName = cleanStr(contact.full_name);
     if (!fullName && currentUser?.full_name) {
-      fullName = currentUser.full_name;
+      fullName = cleanStr(currentUser.full_name);
       fallbacks.full_name = true;
     }
 
-    let email = contact.email || '';
+    let email = cleanStr(contact.email);
     if (!email && currentUser?.email) {
-      email = currentUser.email;
+      email = cleanStr(currentUser.email);
       fallbacks.email = true;
     }
 
@@ -100,58 +127,157 @@ export default function OnboardingPage() {
       contact_info: {
         full_name: fullName,
         email: email,
-        phone: contact.phone || '',
-        location: contact.location || '',
-        linkedin: contact.linkedin || '',
-        github: contact.github || '',
-        portfolio: contact.portfolio || '',
+        phone: cleanStr(contact.phone),
+        location: cleanStr(contact.location),
+        linkedin: cleanStr(contact.linkedin),
+        github: cleanStr(contact.github),
+        portfolio: cleanStr(contact.portfolio),
       },
-      summary: apiProfile?.summary || '',
+      summary: cleanStr(apiProfile?.summary),
       skills: {
-        languages: apiProfile?.skills?.languages || [],
-        frameworks: apiProfile?.skills?.frameworks || [],
-        databases: apiProfile?.skills?.databases || [],
-        tools: apiProfile?.skills?.tools || [],
-        cloud_devops: apiProfile?.skills?.cloud_devops || [],
-        soft_skills: apiProfile?.skills?.soft_skills || [],
+        languages: (apiProfile?.skills?.languages || []).map(cleanStr).filter(Boolean),
+        frameworks: (apiProfile?.skills?.frameworks || []).map(cleanStr).filter(Boolean),
+        databases: (apiProfile?.skills?.databases || []).map(cleanStr).filter(Boolean),
+        tools: (apiProfile?.skills?.tools || []).map(cleanStr).filter(Boolean),
+        cloud_devops: (apiProfile?.skills?.cloud_devops || []).map(cleanStr).filter(Boolean),
+        soft_skills: (apiProfile?.skills?.soft_skills || []).map(cleanStr).filter(Boolean),
       },
-      experience: apiProfile?.experience || [],
-      projects: apiProfile?.projects || [],
-      education: apiProfile?.education || [],
-      certifications: apiProfile?.certifications || [],
-      links: apiProfile?.links || [],
+      education: (apiProfile?.education || []).map((e) => ({
+        institution: cleanStr(e.institution || e.school || e.college),
+        degree: cleanStr(e.degree),
+        field_of_study: cleanStr(e.field_of_study || e.major),
+        start_year: cleanStr(e.start_year || e.start_date),
+        end_year: cleanStr(e.end_year || e.end_date),
+        grade_type: cleanStr(e.grade_type) || 'CGPA',
+        grade_value: cleanStr(e.grade_value || e.gpa),
+        secondary_percentage: cleanStr(e.secondary_percentage),
+      })),
+      experience: (apiProfile?.experience || []).map((exp) => ({
+        company: cleanStr(exp.company),
+        role: cleanStr(exp.role || exp.title),
+        start_date: cleanStr(exp.start_date || exp.start_year),
+        end_date: cleanStr(exp.end_date || exp.end_year),
+        is_current: Boolean(exp.is_current),
+        location: cleanStr(exp.location),
+        bullets: Array.isArray(exp.bullets)
+          ? exp.bullets.map(cleanStr).filter(Boolean)
+          : (typeof exp.bullets === 'string' ? exp.bullets.split('\n').map(cleanStr).filter(Boolean) : []),
+      })),
+      projects: (apiProfile?.projects || []).map((p) => ({
+        title: cleanStr(p.title || p.project_name || p.name),
+        role: cleanStr(p.role),
+        description: cleanStr(p.description || p.summary),
+        tech_stack: Array.isArray(p.tech_stack)
+          ? p.tech_stack.map(cleanStr).filter(Boolean)
+          : (Array.isArray(p.technologies) ? p.technologies.map(cleanStr).filter(Boolean) : []),
+        bullets: Array.isArray(p.bullets)
+          ? p.bullets.map(cleanStr).filter(Boolean)
+          : (Array.isArray(p.bullet_points) ? p.bullet_points.map(cleanStr).filter(Boolean) : []),
+        github_url: cleanStr(p.github_url || p.links?.github_repo || (p.link && p.link.includes('github.com') ? p.link : '')),
+        demo_url: cleanStr(p.demo_url || p.links?.live_demo || (p.link && !p.link.includes('github.com') ? p.link : '')),
+        link: cleanStr(p.link || p.github_url || p.demo_url),
+        links: {
+          github_repo: cleanStr(p.github_url || p.links?.github_repo || (p.link && p.link.includes('github.com') ? p.link : '')),
+          live_demo: cleanStr(p.demo_url || p.links?.live_demo || (p.link && !p.link.includes('github.com') ? p.link : '')),
+        },
+        source: p.source || 'resume',
+        metrics: cleanStr(p.metrics),
+      })),
+      certifications: (apiProfile?.certifications || []).map((c) => ({
+        name: cleanStr(c.name || c.title),
+        issuer: cleanStr(c.issuer || c.organization),
+        date: cleanStr(c.date || c.issue_date || c.year),
+        url: cleanStr(c.url || c.credential_url),
+      })),
+      achievements: (apiProfile?.achievements || []).map((a) => ({
+        title: cleanStr(a.title || a.name),
+        description: cleanStr(a.description || a.summary),
+        date: cleanStr(a.date || a.year),
+        issuer: cleanStr(a.issuer || a.organization),
+      })),
+      links: (apiProfile?.links || []).map((l) => ({
+        label: cleanStr(l.label),
+        url: cleanStr(l.url),
+      })),
     };
   };
 
-  const handleUploadComplete = async ({ resumeId, isCached, filename }) => {
-    setActiveResumeId(resumeId);
-    setSuccessMsg(isCached ? 'Resume retrieved from cache instantly!' : 'Resume parsed and verified successfully!');
-    try {
-      // 1. Fetch structured parsed result with field metadata
-      const res = await api.get(`/resumes/${resumeId}/parsed`);
-      if (res.data) {
-        const parsedData = res.data;
-        setParseMetadata({
-          summary_counts: parsedData.summary_counts || {},
-          field_meta: parsedData.field_meta || [],
-          ocr_used: parsedData.ocr_used || false,
-          raw_text_length: parsedData.raw_text_length || 0,
-          filename: parsedData.filename || filename,
-          status: parsedData.status,
-        });
-
-        const mapped = mapApiProfileToForm(parsedData.profile, user);
-        setProfile(mapped);
-      }
-    } catch (e) {
-      console.warn('Could not fetch /resumes/{id}/parsed, falling back to /profile/master', e);
-      await loadExistingData();
-    }
-    setTimeout(() => {
-      setSuccessMsg('');
-      setStep(2);
-    }, 1200);
+  // Convert form state back into clean API payload
+  const formToApi = (formProfile) => {
+    return {
+      contact_info: {
+        full_name: cleanStr(formProfile.contact_info?.full_name),
+        email: cleanStr(formProfile.contact_info?.email),
+        phone: cleanStr(formProfile.contact_info?.phone),
+        location: cleanStr(formProfile.contact_info?.location),
+        linkedin: cleanStr(formProfile.contact_info?.linkedin) || null,
+        github: cleanStr(formProfile.contact_info?.github) || null,
+        portfolio: cleanStr(formProfile.contact_info?.portfolio) || null,
+      },
+      summary: cleanStr(formProfile.summary),
+      skills: {
+        languages: (formProfile.skills?.languages || []).map(cleanStr).filter(Boolean),
+        frameworks: (formProfile.skills?.frameworks || []).map(cleanStr).filter(Boolean),
+        databases: (formProfile.skills?.databases || []).map(cleanStr).filter(Boolean),
+        tools: (formProfile.skills?.tools || []).map(cleanStr).filter(Boolean),
+        cloud_devops: (formProfile.skills?.cloud_devops || []).map(cleanStr).filter(Boolean),
+        soft_skills: (formProfile.skills?.soft_skills || []).map(cleanStr).filter(Boolean),
+      },
+      education: (formProfile.education || []).map((e) => ({
+        institution: cleanStr(e.institution),
+        degree: cleanStr(e.degree),
+        field_of_study: cleanStr(e.field_of_study) || null,
+        start_year: cleanStr(e.start_year) || null,
+        end_year: cleanStr(e.end_year) || null,
+        gpa: cleanStr(e.grade_value || e.gpa) || null,
+        grade_type: cleanStr(e.grade_type) || 'CGPA',
+        grade_value: cleanStr(e.grade_value || e.gpa) || null,
+        secondary_percentage: cleanStr(e.secondary_percentage) || null,
+      })),
+      experience: (formProfile.experience || []).map((exp) => ({
+        company: cleanStr(exp.company),
+        role: cleanStr(exp.role),
+        start_date: cleanStr(exp.start_date),
+        end_date: cleanStr(exp.end_date),
+        is_current: Boolean(exp.is_current),
+        location: cleanStr(exp.location) || null,
+        bullets: (exp.bullets || []).map(cleanStr).filter(Boolean),
+      })),
+      projects: (formProfile.projects || []).map((p) => ({
+        title: cleanStr(p.title),
+        role: cleanStr(p.role) || null,
+        description: cleanStr(p.description) || null,
+        tech_stack: (p.tech_stack || []).map(cleanStr).filter(Boolean),
+        bullets: (p.bullets || []).map(cleanStr).filter(Boolean),
+        link: cleanStr(p.demo_url || p.github_url || p.link) || null,
+        github_url: cleanStr(p.github_url) || null,
+        demo_url: cleanStr(p.demo_url) || null,
+        links: {
+          github_repo: cleanStr(p.github_url) || null,
+          live_demo: cleanStr(p.demo_url) || null,
+        },
+        source: p.source || 'resume',
+        metrics: cleanStr(p.metrics) || null,
+      })),
+      certifications: (formProfile.certifications || []).map((c) => ({
+        name: cleanStr(c.name),
+        issuer: cleanStr(c.issuer),
+        date: cleanStr(c.date) || null,
+        url: cleanStr(c.url) || null,
+      })),
+      achievements: (formProfile.achievements || []).map((a) => ({
+        title: cleanStr(a.title),
+        description: cleanStr(a.description) || null,
+        date: cleanStr(a.date) || null,
+        issuer: cleanStr(a.issuer) || null,
+      })),
+      links: (formProfile.links || []).map((l) => ({
+        label: cleanStr(l.label),
+        url: cleanStr(l.url),
+      })),
+    };
   };
+
 
   const getFieldBadge = (fieldPath) => {
     const rawKey = fieldPath.replace('contact_info.', '');
@@ -201,6 +327,9 @@ export default function OnboardingPage() {
       portfolio: '',
     },
     summary: '',
+    education: [],
+    experience: [],
+    projects: [],
     skills: {
       languages: [],
       frameworks: [],
@@ -209,12 +338,36 @@ export default function OnboardingPage() {
       cloud_devops: [],
       soft_skills: [],
     },
-    experience: [],
-    projects: [],
-    education: [],
     certifications: [],
+    achievements: [],
     links: [],
   });
+
+  const [projectTechInput, setProjectTechInput] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null); // { type, index }
+
+  // Step 2: GitHub repo suggestion state
+  const [githubSuggestions, setGithubSuggestions] = useState({});
+  const [githubSuggestionsLoading, setGithubSuggestionsLoading] = useState(false);
+  const [githubSuggestionsNotice, setGithubSuggestionsNotice] = useState('');
+
+  const fetchGithubRepoSuggestions = async () => {
+    setGithubSuggestionsLoading(true);
+    setGithubSuggestionsNotice('');
+    try {
+      const res = await api.get('/profile/projects/github-suggestions');
+      if (res.data?.suggestions) {
+        setGithubSuggestions(res.data.suggestions);
+        if (res.data.rate_limit_notice) {
+          setGithubSuggestionsNotice(res.data.rate_limit_notice);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch github suggestions:', e);
+    } finally {
+      setGithubSuggestionsLoading(false);
+    }
+  };
 
   // Step 3: Job Preferences State
   const [preferences, setPreferences] = useState({
@@ -251,27 +404,43 @@ export default function OnboardingPage() {
   // New Skill Temp State
   const [newSkill, setNewSkill] = useState({ category: 'languages', value: '' });
 
-  // On mount: if user logged in, attempt to fetch existing master profile
-  useEffect(() => {
-    if (user) {
-      loadExistingData();
-    }
-  }, [user]);
-
-  const loadExistingData = async () => {
+  // Fetch onboarding state from backend and sync steps
+  const fetchOnboardingState = async (shouldSetInitialStep = false) => {
     try {
-      const res = await api.get('/profile/master');
+      setStateError(false);
+      const res = await api.get('/onboarding/state');
       if (res.data) {
-        setProfile(res.data);
+        setOnboardingState(res.data);
+        if (shouldSetInitialStep) {
+          const lastCompleted = res.data.last_completed_step || 0;
+          if (lastCompleted >= 4) {
+            setStep(4);
+          } else {
+            setStep(Math.min(4, Math.max(1, lastCompleted + 1)));
+          }
+        }
       }
     } catch (e) {
-      // Profile may not exist yet, which is expected for fresh user
+      console.error('Failed to fetch onboarding state:', e);
+      setStateError(true);
     }
+  };
+
+  const loadAllUserData = async () => {
+    setStateLoading(true);
+    try {
+      await fetchOnboardingState(true);
+
+      const res = await api.get('/profile/master');
+      if (res.data) {
+        setProfile(mapApiProfileToForm(res.data, user));
+      }
+    } catch (e) {}
 
     try {
       const prefRes = await api.get('/preferences/');
       if (prefRes.data) {
-        setPreferences(prefRes.data);
+        setPreferences((prev) => ({ ...prev, ...prefRes.data }));
       }
     } catch (e) {}
 
@@ -281,9 +450,152 @@ export default function OnboardingPage() {
         setQuestions((prev) => ({ ...prev, ...qbRes.data }));
       }
     } catch (e) {}
+
+    setStateLoading(false);
   };
 
-  // Step 1: Upload Resume
+  useEffect(() => {
+    if (user) {
+      loadAllUserData();
+    }
+  }, [user]);
+
+  // Step 1: Upload Resume Handlers
+  const handleUploadComplete = async ({ resumeId, isCached, filename }) => {
+    if (!resumeId) return;
+    setActiveResumeId(resumeId);
+    setError('');
+    setUploadLoading(true);
+    try {
+      const res = await api.get(`/resumes/${resumeId}/parsed`);
+      if (res.data) {
+        const parsedData = res.data;
+        setParseMetadata({
+          summary_counts: parsedData.summary_counts || {},
+          field_meta: parsedData.field_meta || [],
+          ocr_used: parsedData.ocr_used || false,
+          raw_text_length: parsedData.raw_text_length || 0,
+          filename: parsedData.filename || filename,
+          status: parsedData.status,
+        });
+
+        const parsedProfile = parsedData.profile;
+        if (parsedProfile) {
+          const mappedIncoming = mapApiProfileToForm(parsedProfile, user);
+          if (onboardingState?.has_active_profile) {
+            // If profile already exists, ask user whether to merge or replace
+            setIncomingProfile(mappedIncoming);
+            setMergeModalOpen(true);
+          } else {
+            // Fresh user: directly apply parsed profile
+            setProfile(mappedIncoming);
+            setSuccessMsg(isCached ? 'Resume retrieved from cache instantly!' : 'Resume parsed and verified successfully!');
+            await api.put('/onboarding/step', { step: 1 });
+            await fetchOnboardingState();
+            setTimeout(() => {
+              setSuccessMsg('');
+              setStep(2);
+            }, 1000);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to retrieve parsed resume:', err);
+      setError(err.response?.data?.detail || 'Failed to retrieve parsed resume.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  // Merge / Replace Choice Handlers
+  const handleKeepAndFillEmpties = async () => {
+    if (!incomingProfile) return;
+    setProfile((prev) => {
+      const mergedContact = { ...prev.contact_info };
+      for (const [k, v] of Object.entries(incomingProfile.contact_info || {})) {
+        if (!mergedContact[k] && v) {
+          mergedContact[k] = v;
+        }
+      }
+
+      const mergedSummary = prev.summary || incomingProfile.summary;
+
+      const mergedSkills = { ...prev.skills };
+      for (const cat of ['languages', 'frameworks', 'databases', 'tools', 'cloud_devops', 'soft_skills']) {
+        const existingList = prev.skills?.[cat] || [];
+        const incomingList = incomingProfile.skills?.[cat] || [];
+        mergedSkills[cat] = Array.from(new Set([...existingList, ...incomingList]));
+      }
+
+      let mergedProjects = [...(prev.projects || [])];
+      if (mergedProjects.length === 0) {
+        mergedProjects = incomingProfile.projects || [];
+      } else {
+        const existingTitles = new Set(mergedProjects.map((p) => p.title?.toLowerCase().trim()));
+        for (const p of incomingProfile.projects || []) {
+          if (p.title && !existingTitles.has(p.title.toLowerCase().trim())) {
+            mergedProjects.push(p);
+          }
+        }
+      }
+
+      let mergedExp = [...(prev.experience || [])];
+      if (mergedExp.length === 0) {
+        mergedExp = incomingProfile.experience || [];
+      } else {
+        const existingKeys = new Set(mergedExp.map((e) => `${e.company?.toLowerCase()}_${e.role?.toLowerCase()}`));
+        for (const e of incomingProfile.experience || []) {
+          const key = `${e.company?.toLowerCase()}_${e.role?.toLowerCase()}`;
+          if (!existingKeys.has(key)) {
+            mergedExp.push(e);
+          }
+        }
+      }
+
+      let mergedEdu = [...(prev.education || [])];
+      if (mergedEdu.length === 0) {
+        mergedEdu = incomingProfile.education || [];
+      }
+
+      return {
+        ...prev,
+        contact_info: mergedContact,
+        summary: mergedSummary,
+        skills: mergedSkills,
+        projects: mergedProjects,
+        experience: mergedExp,
+        education: mergedEdu,
+      };
+    });
+
+    setMergeModalOpen(false);
+    setDiffModalOpen(false);
+    setForceShowUploader(false);
+    setSuccessMsg('Merged new resume data into your profile (preserved your edits).');
+    await api.put('/onboarding/step', { step: 1 });
+    await fetchOnboardingState();
+    setTimeout(() => {
+      setSuccessMsg('');
+      setStep(2);
+    }, 800);
+  };
+
+  const handleReplaceProfile = async () => {
+    if (!incomingProfile) return;
+    setProfile(incomingProfile);
+    setMergeModalOpen(false);
+    setDiffModalOpen(false);
+    setForceShowUploader(false);
+    setSuccessMsg('Replaced profile with newly parsed resume data.');
+    await api.put('/onboarding/step', { step: 1 });
+    await fetchOnboardingState();
+    setTimeout(() => {
+      setSuccessMsg('');
+      setStep(2);
+    }, 800);
+  };
+
+  // Step 1 direct file upload (fallback)
   const handleFileUpload = async (file) => {
     if (!file) return;
     setError('');
@@ -295,24 +607,22 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const parsed = res.data.parsed_profile;
-      setProfile((prev) => ({
-        ...prev,
-        contact_info: parsed.contact_info || prev.contact_info,
-        summary: parsed.summary || prev.summary,
-        skills: parsed.skills || prev.skills,
-        experience: parsed.experience || prev.experience,
-        projects: parsed.projects || prev.projects,
-        education: parsed.education || prev.education,
-        certifications: parsed.certifications || prev.certifications,
-        links: parsed.links || prev.links,
-      }));
-      setSuccessMsg('Resume parsed and structured into Master Profile successfully!');
-      setTimeout(() => {
-        setSuccessMsg('');
-        setStep(2);
-      }, 1200);
+      const mapped = mapApiProfileToForm(parsed, user);
+      if (onboardingState?.has_active_profile) {
+        setIncomingProfile(mapped);
+        setMergeModalOpen(true);
+      } else {
+        setProfile(mapped);
+        setSuccessMsg('Resume parsed and structured into Master Profile successfully!');
+        await api.put('/onboarding/step', { step: 1 });
+        await fetchOnboardingState();
+        setTimeout(() => {
+          setSuccessMsg('');
+          setStep(2);
+        }, 1200);
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to parse resume. You can also load sample data.');
+      setError(err.response?.data?.detail || 'Failed to parse resume.');
     } finally {
       setUploadLoading(false);
     }
@@ -326,12 +636,36 @@ export default function OnboardingPage() {
     await handleFileUpload(sampleFile);
   };
 
-  // Step 2: Save Profile
+  // Step 2: Save Master Profile
   const handleSaveProfile = async () => {
-    setSaveLoading(true);
     setError('');
+    const name = cleanStr(profile.contact_info?.full_name);
+    const email = cleanStr(profile.contact_info?.email);
+
+    if (!name) {
+      setError('Full Name is required.');
+      return;
+    }
+    if (!email) {
+      setError('Email Address is required.');
+      return;
+    }
+
+    const hasEducation = (profile.education || []).length > 0;
+    const hasProjects = (profile.projects || []).length > 0;
+    const hasExperience = (profile.experience || []).length > 0;
+
+    if (!hasEducation && !hasProjects && !hasExperience) {
+      setError('Please add at least one entry under Education, Projects, or Work Experience.');
+      return;
+    }
+
+    setSaveLoading(true);
     try {
-      await api.put('/profile/master', profile);
+      const payload = formToApi(profile);
+      await api.put('/profile/master', payload);
+      await api.put('/onboarding/step', { step: 2 });
+      await fetchOnboardingState();
       setSuccessMsg('Master Profile saved as single source of truth!');
       setTimeout(() => {
         setSuccessMsg('');
@@ -344,17 +678,19 @@ export default function OnboardingPage() {
     }
   };
 
-  // Step 3: Save Preferences
+  // Step 3: Save Job Preferences
   const handleSavePreferences = async () => {
-    setSaveLoading(true);
     setError('');
+    setSaveLoading(true);
     try {
-      await api.put('/preferences/', preferences);
-      setSuccessMsg('Target preferences saved!');
+      await api.put('/preferences', preferences);
+      await api.put('/onboarding/step', { step: 3 });
+      await fetchOnboardingState();
+      setSuccessMsg('Job preferences saved!');
       setTimeout(() => {
         setSuccessMsg('');
         setStep(4);
-      }, 800);
+      }, 600);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save job preferences.');
     } finally {
@@ -362,34 +698,192 @@ export default function OnboardingPage() {
     }
   };
 
-  // Step 4: Save Questions Bank & Complete Onboarding
+  // Step 4: Complete Onboarding & Save Question Bank
   const handleCompleteOnboarding = async () => {
-    setSaveLoading(true);
     setError('');
+    setSaveLoading(true);
     try {
       await api.put('/profile/question-bank', questions);
-      setSuccessMsg('Onboarding complete! Navigating to your master profile dashboard...');
+      await api.put('/onboarding/step', { step: 4 });
+      await fetchOnboardingState();
+      setSuccessMsg('Onboarding complete! Your profile is automated.');
       setTimeout(() => {
-        router.push('/dashboard/profile');
-      }, 1000);
+        setSuccessMsg('');
+        router.push('/pipeline');
+      }, 800);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save questions bank.');
+      setError(err.response?.data?.detail || 'Failed to save questions.');
     } finally {
       setSaveLoading(false);
     }
   };
 
+  // Helper functions for reordering
+  const moveItem = (listKey, index, direction) => {
+    setProfile((prev) => {
+      const list = [...(prev[listKey] || [])];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= list.length) return prev;
+      const temp = list[index];
+      list[index] = list[targetIndex];
+      list[targetIndex] = temp;
+      return { ...prev, [listKey]: list };
+    });
+  };
+
+  // Education manipulation
+  const addEducation = () => {
+    setProfile((prev) => ({
+      ...prev,
+      education: [
+        ...prev.education,
+        {
+          institution: '',
+          degree: '',
+          field_of_study: '',
+          start_year: '',
+          end_year: '',
+          grade_type: 'CGPA',
+          grade_value: '',
+          secondary_percentage: '',
+        },
+      ],
+    }));
+  };
+
+  const removeEducation = (idx) => {
+    setProfile((prev) => ({
+      ...prev,
+      education: prev.education.filter((_, i) => i !== idx),
+    }));
+    setConfirmDelete(null);
+  };
+
+  // Work Experience manipulation
+  const addExperience = () => {
+    setProfile((prev) => ({
+      ...prev,
+      experience: [
+        ...prev.experience,
+        {
+          company: '',
+          role: '',
+          start_date: '',
+          end_date: '',
+          is_current: false,
+          location: '',
+          bullets: [''],
+        },
+      ],
+    }));
+  };
+
+  const removeExperience = (idx) => {
+    setProfile((prev) => ({
+      ...prev,
+      experience: prev.experience.filter((_, i) => i !== idx),
+    }));
+    setConfirmDelete(null);
+  };
+
+  // Projects manipulation
+  const addProject = () => {
+    setProfile((prev) => ({
+      ...prev,
+      projects: [
+        ...prev.projects,
+        {
+          title: '',
+          role: '',
+          description: '',
+          tech_stack: [],
+          bullets: [''],
+          github_url: '',
+          demo_url: '',
+        },
+      ],
+    }));
+  };
+
+  const removeProject = (idx) => {
+    setProfile((prev) => ({
+      ...prev,
+      projects: prev.projects.filter((_, i) => i !== idx),
+    }));
+    setConfirmDelete(null);
+  };
+
+  const addProjectTech = (projectIdx, tech) => {
+    const val = cleanStr(tech);
+    if (!val) return;
+    setProfile((prev) => {
+      const updated = [...prev.projects];
+      const stack = updated[projectIdx].tech_stack || [];
+      if (!stack.includes(val)) {
+        updated[projectIdx] = {
+          ...updated[projectIdx],
+          tech_stack: [...stack, val],
+        };
+      }
+      return { ...prev, projects: updated };
+    });
+    setProjectTechInput((prev) => ({ ...prev, [projectIdx]: '' }));
+  };
+
+  const removeProjectTech = (projectIdx, tech) => {
+    setProfile((prev) => {
+      const updated = [...prev.projects];
+      updated[projectIdx] = {
+        ...updated[projectIdx],
+        tech_stack: (updated[projectIdx].tech_stack || []).filter((t) => t !== tech),
+      };
+      return { ...prev, projects: updated };
+    });
+  };
+
+  const addProjectBullet = (projectIdx) => {
+    setProfile((prev) => {
+      const updated = [...prev.projects];
+      updated[projectIdx] = {
+        ...updated[projectIdx],
+        bullets: [...(updated[projectIdx].bullets || []), ''],
+      };
+      return { ...prev, projects: updated };
+    });
+  };
+
+  const updateProjectBullet = (projectIdx, bulletIdx, val) => {
+    setProfile((prev) => {
+      const updated = [...prev.projects];
+      const bullets = [...(updated[projectIdx].bullets || [])];
+      bullets[bulletIdx] = val;
+      updated[projectIdx] = { ...updated[projectIdx], bullets };
+      return { ...prev, projects: updated };
+    });
+  };
+
+  const removeProjectBullet = (projectIdx, bulletIdx) => {
+    setProfile((prev) => {
+      const updated = [...prev.projects];
+      const bullets = (updated[projectIdx].bullets || []).filter((_, i) => i !== bulletIdx);
+      updated[projectIdx] = { ...updated[projectIdx], bullets };
+      return { ...prev, projects: updated };
+    });
+  };
+
   // Helper functions for Skill manipulation
   const addSkill = (category) => {
     if (!newSkill.value.trim()) return;
+    const val = cleanStr(newSkill.value);
+    if (!val) return;
     setProfile((prev) => {
       const existing = prev.skills[category] || [];
-      if (!existing.includes(newSkill.value.trim())) {
+      if (!existing.includes(val)) {
         return {
           ...prev,
           skills: {
             ...prev.skills,
-            [category]: [...existing, newSkill.value.trim()],
+            [category]: [...existing, val],
           },
         };
       }
@@ -408,30 +902,52 @@ export default function OnboardingPage() {
     }));
   };
 
-  // Experience manipulation
-  const addExperience = () => {
+  // Certifications manipulation
+  const addCertification = () => {
     setProfile((prev) => ({
       ...prev,
-      experience: [
+      certifications: [
+        ...prev.certifications,
         {
-          company: 'New Company',
-          role: 'Software Engineer',
-          start_date: '2023',
-          end_date: 'Present',
-          is_current: true,
-          location: 'Remote',
-          bullets: ['Engineered scalable microservices and APIs.'],
+          name: '',
+          issuer: '',
+          date: '',
+          url: '',
         },
-        ...prev.experience,
       ],
     }));
   };
 
-  const removeExperience = (idx) => {
+  const removeCertification = (idx) => {
     setProfile((prev) => ({
       ...prev,
-      experience: prev.experience.filter((_, i) => i !== idx),
+      certifications: prev.certifications.filter((_, i) => i !== idx),
     }));
+    setConfirmDelete(null);
+  };
+
+  // Achievements manipulation
+  const addAchievement = () => {
+    setProfile((prev) => ({
+      ...prev,
+      achievements: [
+        ...(prev.achievements || []),
+        {
+          title: '',
+          description: '',
+          date: '',
+          issuer: '',
+        },
+      ],
+    }));
+  };
+
+  const removeAchievement = (idx) => {
+    setProfile((prev) => ({
+      ...prev,
+      achievements: (prev.achievements || []).filter((_, i) => i !== idx),
+    }));
+    setConfirmDelete(null);
   };
 
   // Add custom target role
@@ -458,6 +974,38 @@ export default function OnboardingPage() {
       <Navbar />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Onboarding Complete Banner (if fully onboarded) */}
+        {onboardingState?.last_completed_step >= 4 && (
+          <div className="mb-8 p-5 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-indigo-950/40 to-slate-900 border border-emerald-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-md">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <Trophy className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Onboarding Complete!</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Ready for Automation
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Your Master Profile, job preferences, and question bank are set up. You can review them anytime or proceed to your job pipeline.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => router.push('/pipeline')}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Open Pipeline</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Stepper Progress Bar */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-4">
@@ -486,34 +1034,41 @@ export default function OnboardingPage() {
               { num: 2, label: 'Master Profile' },
               { num: 3, label: 'Job Preferences' },
               { num: 4, label: 'Question Bank' },
-            ].map((s) => (
-              <button
-                key={s.num}
-                onClick={() => setStep(s.num)}
-                className={`text-left p-3 rounded-xl border transition-all ${
-                  step === s.num
-                    ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
-                    : step > s.num
-                    ? 'bg-slate-900/60 border-emerald-500/30 text-emerald-400'
-                    : 'bg-slate-900/30 border-white/5 text-slate-500'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      step === s.num
-                        ? 'bg-indigo-500 text-white'
-                        : step > s.num
-                        ? 'bg-emerald-500 text-black'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {step > s.num ? '✓' : s.num}
-                  </span>
-                  <span className="text-xs font-medium truncate">{s.label}</span>
-                </div>
-              </button>
-            ))}
+            ].map((s) => {
+              const isCompleted = (onboardingState?.last_completed_step || 0) >= s.num;
+              const isClickable = isCompleted || s.num <= (onboardingState?.last_completed_step || 0) + 1;
+              return (
+                <button
+                  key={s.num}
+                  disabled={!isClickable}
+                  onClick={() => setStep(s.num)}
+                  className={`text-left p-3 rounded-xl border transition-all ${
+                    step === s.num
+                      ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                      : isCompleted
+                      ? 'bg-slate-900/60 border-emerald-500/30 text-emerald-400 hover:border-emerald-500/60 cursor-pointer'
+                      : isClickable
+                      ? 'bg-slate-900/30 border-white/10 text-slate-300 hover:border-indigo-500/40 cursor-pointer'
+                      : 'bg-slate-900/20 border-white/5 text-slate-600 cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        step === s.num
+                          ? 'bg-indigo-500 text-white'
+                          : isCompleted
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {isCompleted ? '✓' : s.num}
+                    </span>
+                    <span className="text-xs font-medium truncate">{s.label}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -536,18 +1091,163 @@ export default function OnboardingPage() {
         {/* ---------------------------------------------------- */}
         {step === 1 && (
           <div className="space-y-6">
-            <div className="text-center max-w-lg mx-auto">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Upload your latest Resume</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                We parse your PDF or DOCX into a structured JSON Master Profile with strict zero-hallucination verification.
-              </p>
-            </div>
+            {stateLoading ? (
+              /* Loading Skeleton: prevents flash of empty upload screen */
+              <div className="space-y-6 animate-pulse">
+                <div className="text-center max-w-lg mx-auto space-y-2">
+                  <div className="h-7 bg-slate-800 rounded-xl w-3/4 mx-auto" />
+                  <div className="h-4 bg-slate-800/60 rounded-lg w-1/2 mx-auto" />
+                </div>
+                <div className="p-8 rounded-2xl bg-slate-900/40 border border-white/5 space-y-4">
+                  <div className="h-12 bg-slate-800/50 rounded-xl w-full" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="h-20 bg-slate-800/30 rounded-xl" />
+                    <div className="h-20 bg-slate-800/30 rounded-xl" />
+                  </div>
+                  <div className="h-10 bg-slate-800/50 rounded-xl w-1/3" />
+                </div>
+              </div>
+            ) : stateError ? (
+              /* Error State with Retry */
+              <div className="p-8 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-center space-y-4">
+                <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
+                <h3 className="text-base font-semibold text-white">Could not load onboarding state</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Unable to connect to the backend server. Please check your network connection and retry.
+                </p>
+                <button
+                  type="button"
+                  onClick={loadAllUserData}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-600/20"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </button>
+              </div>
+            ) : (onboardingState?.has_resume && onboardingState?.has_active_profile && !forceShowUploader) ? (
+              /* RESUME ON FILE CARD: Displays saved resume, summary, and actions */
+              <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950 border border-indigo-500/20 shadow-2xl backdrop-blur-xl space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                      <FileCheck className="w-6 h-6 text-indigo-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-bold text-white truncate max-w-[280px] sm:max-w-md">
+                          {onboardingState.resume?.filename || 'Resume on File'}
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Parsed & Verified
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Uploaded {onboardingState.resume?.uploaded_at ? new Date(onboardingState.resume.uploaded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'recently'} • Zero Hallucination Verified
+                      </p>
+                    </div>
+                  </div>
 
-            <ResumeUploader
-              onUploadSuccess={handleUploadComplete}
-              onSkipToManual={() => setStep(2)}
-              sampleResumeText={SAMPLE_RESUME_TEXT}
-            />
+                  {onboardingState.resume?.download_url && (
+                    <a
+                      href={api.defaults.baseURL ? `${api.defaults.baseURL}${onboardingState.resume.download_url}` : onboardingState.resume.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium border border-white/10 transition-colors shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download / View Resume</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* Resume Summary & Completeness Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Extracted Content</span>
+                    <p className="text-sm font-medium text-white">
+                      {onboardingState.resume?.parse_summary || '22 frameworks, 4 projects, 1 education entry'}
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Master Profile Completeness</span>
+                      <span className="text-xs font-bold text-indigo-400">{onboardingState.profile_completeness || 0}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${onboardingState.profile_completeness || 0}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary Actions */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep(Math.min(4, Math.max(2, (onboardingState.last_completed_step || 1) + 1)))}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue with this resume</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium border border-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span>Review / edit my profile</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForceShowUploader(true)}
+                    className="px-4 py-2.5 rounded-xl bg-transparent hover:bg-white/5 text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors ml-auto flex items-center gap-2 cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload a new resume</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Upload Zone (New Users or Uploading a New Resume) */
+              <div className="space-y-4">
+                {forceShowUploader && (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>
+                        <strong>Notice:</strong> Uploading a new resume creates a draft and will not overwrite your saved profile until you confirm.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForceShowUploader(false)}
+                      className="text-amber-400 hover:text-white underline underline-offset-2 shrink-0 cursor-pointer"
+                    >
+                      ← Keep current resume
+                    </button>
+                  </div>
+                )}
+
+                <div className="text-center max-w-lg mx-auto">
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Upload your latest Resume</h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    We parse your PDF or DOCX into a structured JSON Master Profile with strict zero-hallucination verification.
+                  </p>
+                </div>
+
+                <ResumeUploader
+                  onUploadSuccess={handleUploadComplete}
+                  onSkipToManual={() => setStep(2)}
+                  sampleResumeText={SAMPLE_RESUME_TEXT}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -645,20 +1345,24 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* 1. Contact Info Card */}
+                {/* 1. Contact & Identification */}
                 <div className="glass-panel p-6 rounded-2xl space-y-4">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <User className="w-4 h-4 text-indigo-400" />
-                    Contact & Identification
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <User className="w-4 h-4 text-indigo-400" />
+                      <span>Contact & Identification</span>
+                    </h3>
+                    <span className="text-xs text-slate-400">Primary Identity</span>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">Full Name</label>
+                        <label className="text-sm font-medium text-slate-300">Full Name *</label>
                         {getFieldBadge('contact_info.full_name')}
                       </div>
                       <input
                         type="text"
+                        placeholder="e.g. Alex Mercer"
                         value={profile.contact_info.full_name || ''}
                         onChange={(e) =>
                           setProfile({
@@ -671,11 +1375,12 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">Email Address</label>
+                        <label className="text-sm font-medium text-slate-300">Email Address *</label>
                         {getFieldBadge('contact_info.email')}
                       </div>
                       <input
                         type="email"
+                        placeholder="e.g. alex@example.com"
                         value={profile.contact_info.email || ''}
                         onChange={(e) =>
                           setProfile({
@@ -688,11 +1393,19 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">Phone</label>
-                        {getFieldBadge('contact_info.phone')}
+                        <label className="text-sm font-medium text-slate-300">Phone</label>
+                        {profile.contact_info.phone ? (
+                          getFieldBadge('contact_info.phone')
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                            <AlertCircle className="w-3 h-3 text-amber-400" />
+                            Missing
+                          </span>
+                        )}
                       </div>
                       <input
-                        type="text"
+                        type="tel"
+                        placeholder="e.g. +91 98765 43210"
                         value={profile.contact_info.phone || ''}
                         onChange={(e) =>
                           setProfile({
@@ -705,11 +1418,12 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">Location</label>
+                        <label className="text-sm font-medium text-slate-300">Location</label>
                         {getFieldBadge('contact_info.location')}
                       </div>
                       <input
                         type="text"
+                        placeholder="e.g. San Francisco, CA or Bengaluru, India"
                         value={profile.contact_info.location || ''}
                         onChange={(e) =>
                           setProfile({
@@ -722,11 +1436,12 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">LinkedIn URL</label>
+                        <label className="text-sm font-medium text-slate-300">LinkedIn URL</label>
                         {getFieldBadge('contact_info.linkedin')}
                       </div>
                       <input
-                        type="text"
+                        type="url"
+                        placeholder="https://linkedin.com/in/..."
                         value={profile.contact_info.linkedin || ''}
                         onChange={(e) =>
                           setProfile({
@@ -739,11 +1454,12 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-400">GitHub URL</label>
+                        <label className="text-sm font-medium text-slate-300">GitHub URL</label>
                         {getFieldBadge('contact_info.github')}
                       </div>
                       <input
-                        type="text"
+                        type="url"
+                        placeholder="https://github.com/..."
                         value={profile.contact_info.github || ''}
                         onChange={(e) =>
                           setProfile({
@@ -757,12 +1473,12 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {/* 2. Professional Summary Card */}
+                {/* 2. Professional Summary */}
                 <div className="glass-panel p-6 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-bold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-cyan-400" />
-                      Professional Summary
+                      <span>Professional Summary</span>
                     </h3>
                     {getFieldBadge('summary')}
                   </div>
@@ -770,21 +1486,828 @@ export default function OnboardingPage() {
                     rows={3}
                     value={profile.summary || ''}
                     onChange={(e) => setProfile({ ...profile, summary: e.target.value })}
-                    placeholder="Brief background summary of your career and technical focus..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                    placeholder="Brief background summary of your career, engineering background, and technical focus..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none leading-relaxed"
                   />
                 </div>
 
-                {/* 3. Categorized Skills Card */}
+                {/* 3. Education */}
                 <div className="glass-panel p-6 rounded-2xl space-y-4">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-400" />
-                    Categorized Technical Skills
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <GraduationCap className="w-5 h-5 text-emerald-400" />
+                      <h3 className="text-base font-bold text-white">Education</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold">
+                        {profile.education.length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addEducation}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-sm font-medium flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Education</span>
+                    </button>
+                  </div>
+
+                  {profile.education.length === 0 ? (
+                    <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
+                      <GraduationCap className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-sm font-medium text-slate-300">No education credentials added yet</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Add your university degree, bootcamp, or secondary school details to complete your academic profile.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addEducation}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 text-xs font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Education</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {profile.education.map((edu, idx) => (
+                        <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative border border-white/10">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-emerald-400">Education #{idx + 1}</span>
+                              <span className="text-xs text-slate-400 font-medium">
+                                {edu.institution ? edu.institution : 'New Degree / School'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('education', idx, -1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="w-4 h-4" />
+                                </button>
+                              )}
+                              {idx < profile.education.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('education', idx, 1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                              )}
+                              {confirmDelete?.type === 'education' && confirmDelete?.index === idx ? (
+                                <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-lg text-xs ml-2">
+                                  <span className="text-[11px] text-rose-300">Delete?</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeEducation(idx)}
+                                    className="font-bold text-rose-400 hover:text-white"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDelete(null)}
+                                    className="text-slate-400 hover:text-white ml-1"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete({ type: 'education', index: idx })}
+                                  className="p-1 text-slate-500 hover:text-rose-400 ml-1 rounded"
+                                  title="Remove education"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Institution / University</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. UC Berkeley, IIT Bombay"
+                                value={edu.institution || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].institution = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Degree / Qualification</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. B.S., B.Tech, M.S."
+                                value={edu.degree || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].degree = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Field of Study / Major</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Computer Science, Electrical Eng."
+                                value={edu.field_of_study || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].field_of_study = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Start Year</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 2020"
+                                value={edu.start_year || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].start_year = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">End Year / Expected</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 2024 or Present"
+                                value={edu.end_year || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].end_year = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Grade Type</label>
+                              <select
+                                value={edu.grade_type || 'CGPA'}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].grade_type = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              >
+                                <option value="CGPA">CGPA (out of 10 or 4)</option>
+                                <option value="Percentage">Percentage (%)</option>
+                                <option value="GPA">GPA (out of 4.0)</option>
+                                <option value="Grade">Letter Grade</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Grade / Score</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 8.7 or 3.8 / 4.0"
+                                value={edu.grade_value || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.education];
+                                  updated[idx].grade_value = e.target.value;
+                                  setProfile({ ...profile, education: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-medium text-slate-300">
+                              Secondary / Higher Secondary % (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 94% (12th Grade / High School)"
+                              value={edu.secondary_percentage || ''}
+                              onChange={(e) => {
+                                const updated = [...profile.education];
+                                updated[idx].secondary_percentage = e.target.value;
+                                setProfile({ ...profile, education: updated });
+                              }}
+                              className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Work Experience */}
+                <div className="glass-panel p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-5 h-5 text-cyan-400" />
+                      <h3 className="text-base font-bold text-white">Work Experience</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold">
+                        {profile.experience.length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addExperience}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 text-sm font-medium flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Experience</span>
+                    </button>
+                  </div>
+
+                  {profile.experience.length === 0 ? (
+                    <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
+                      <Briefcase className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-sm font-medium text-slate-300">No work experience found</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        That's fine! Freshers and students can leave this blank, or add internships, open-source work, and freelance gigs if you have any.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addExperience}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 text-xs font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Experience</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {profile.experience.map((exp, idx) => (
+                        <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative border border-white/10">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-cyan-400">Position #{idx + 1}</span>
+                              <span className="text-xs text-slate-400 font-medium">
+                                {exp.role && exp.company ? `${exp.role} at ${exp.company}` : exp.company || 'New Role'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('experience', idx, -1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="w-4 h-4" />
+                                </button>
+                              )}
+                              {idx < profile.experience.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('experience', idx, 1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                              )}
+                              {confirmDelete?.type === 'experience' && confirmDelete?.index === idx ? (
+                                <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-lg text-xs ml-2">
+                                  <span className="text-[11px] text-rose-300">Delete?</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeExperience(idx)}
+                                    className="font-bold text-rose-400 hover:text-white"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDelete(null)}
+                                    className="text-slate-400 hover:text-white ml-1"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete({ type: 'experience', index: idx })}
+                                  className="p-1 text-slate-500 hover:text-rose-400 ml-1 rounded"
+                                  title="Remove experience"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Company</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Acme Corp"
+                                value={exp.company || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.experience];
+                                  updated[idx].company = e.target.value;
+                                  setProfile({ ...profile, experience: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Role / Job Title</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Software Engineer Intern"
+                                value={exp.role || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.experience];
+                                  updated[idx].role = e.target.value;
+                                  setProfile({ ...profile, experience: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Location</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Remote or San Francisco, CA"
+                                value={exp.location || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.experience];
+                                  updated[idx].location = e.target.value;
+                                  setProfile({ ...profile, experience: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Start Date</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. June 2022"
+                                value={exp.start_date || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.experience];
+                                  updated[idx].start_date = e.target.value;
+                                  setProfile({ ...profile, experience: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">End Date</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Present or Dec 2023"
+                                disabled={exp.is_current}
+                                value={exp.is_current ? 'Present' : exp.end_date || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.experience];
+                                  updated[idx].end_date = e.target.value;
+                                  setProfile({ ...profile, experience: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+                              />
+                            </div>
+                            <div className="pt-5 flex items-center">
+                              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(exp.is_current)}
+                                  onChange={(e) => {
+                                    const updated = [...profile.experience];
+                                    updated[idx].is_current = e.target.checked;
+                                    if (e.target.checked) updated[idx].end_date = 'Present';
+                                    setProfile({ ...profile, experience: updated });
+                                  }}
+                                  className="rounded bg-slate-900 border-white/10 text-cyan-500"
+                                />
+                                <span>I currently work here</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Bullets */}
+                          <div>
+                            <label className="text-sm font-medium text-slate-300">
+                              Key Achievements & Bullets (Action + Tech + Metric Impact)
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={(exp.bullets || []).join('\n')}
+                              onChange={(e) => {
+                                const updated = [...profile.experience];
+                                updated[idx].bullets = e.target.value.split('\n');
+                                setProfile({ ...profile, experience: updated });
+                              }}
+                              className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white text-sm font-mono leading-relaxed"
+                              placeholder="One bullet point per line..."
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Projects */}
+                <div className="glass-panel p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FolderGit2 className="w-5 h-5 text-purple-400" />
+                      <h3 className="text-base font-bold text-white">Projects</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-semibold">
+                        {profile.projects.length}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {profile.contact_info?.github && (
+                        <button
+                          type="button"
+                          onClick={fetchGithubRepoSuggestions}
+                          disabled={githubSuggestionsLoading}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+                          title="Fuzzy match projects to your public GitHub repositories"
+                        >
+                          {githubSuggestionsLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                          ) : (
+                            <Github className="w-3.5 h-3.5 text-purple-400" />
+                          )}
+                          <span>{githubSuggestionsLoading ? 'Finding repos...' : 'Find repos from my GitHub'}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={addProject}
+                        className="px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-sm font-medium flex items-center gap-1.5 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Project</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {githubSuggestionsNotice && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{githubSuggestionsNotice}</span>
+                    </div>
+                  )}
+
+                  {profile.projects.length === 0 ? (
+                    <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
+                      <FolderGit2 className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-sm font-medium text-slate-300">No projects added yet</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Showcase your side projects, full-stack web applications, hackathon entries, or open-source libraries.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addProject}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 text-xs font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Project</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {profile.projects.map((proj, idx) => (
+                        <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative border border-white/10">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-purple-400">Project #{idx + 1}</span>
+                              <span className="text-xs text-slate-300 font-medium truncate max-w-xs">
+                                {proj.title || 'Untitled Project'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('projects', idx, -1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="w-4 h-4" />
+                                </button>
+                              )}
+                              {idx < profile.projects.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => moveItem('projects', idx, 1)}
+                                  className="p-1 text-slate-400 hover:text-white rounded"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                              )}
+                              {confirmDelete?.type === 'project' && confirmDelete?.index === idx ? (
+                                <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-lg text-xs ml-2">
+                                  <span className="text-[11px] text-rose-300">Delete?</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeProject(idx)}
+                                    className="font-bold text-rose-400 hover:text-white"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDelete(null)}
+                                    className="text-slate-400 hover:text-white ml-1"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete({ type: 'project', index: idx })}
+                                  className="p-1 text-slate-500 hover:text-rose-400 ml-1 rounded"
+                                  title="Remove project"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Project Title *</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Distributed Task Queue"
+                                value={proj.title || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.projects];
+                                  updated[idx].title = e.target.value;
+                                  setProfile({ ...profile, projects: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">
+                                Role / Contribution <span className="text-xs text-slate-500 font-normal">(only if in resume)</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Creator / Full-Stack Engineer"
+                                value={proj.role || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.projects];
+                                  updated[idx].role = e.target.value;
+                                  setProfile({ ...profile, projects: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-medium text-slate-300">
+                              Short Description <span className="text-xs text-slate-500 font-normal">(overview before bullets)</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Brief 1-2 sentence overview of the project architecture and what problem it solves..."
+                              value={proj.description || ''}
+                              onChange={(e) => {
+                                const updated = [...profile.projects];
+                                updated[idx].description = e.target.value;
+                                setProfile({ ...profile, projects: updated });
+                              }}
+                              className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                                  <Github className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>GitHub Repository URL</span>
+                                </label>
+                                {proj.source === 'github_suggestion' ? (
+                                  <span className="text-[11px] font-medium text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                                    From GitHub suggestion
+                                  </span>
+                                ) : !proj.github_url ? (
+                                  <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    Missing • Check this
+                                  </span>
+                                ) : null}
+                              </div>
+                              <input
+                                type="url"
+                                placeholder="https://github.com/..."
+                                value={proj.github_url || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.projects];
+                                  updated[idx].github_url = e.target.value;
+                                  updated[idx].source = 'manual';
+                                  setProfile({ ...profile, projects: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+
+                              {/* GitHub Suggestion Chips */}
+                              {githubSuggestions[proj.title] && githubSuggestions[proj.title].length > 0 && !proj.github_url && (
+                                <div className="mt-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1.5">
+                                  <div className="text-[11px] font-medium text-indigo-300 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                                    <span>Suggested from your GitHub — click to confirm:</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {githubSuggestions[proj.title].map((sug, sIdx) => (
+                                      <button
+                                        key={sIdx}
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = [...profile.projects];
+                                          updated[idx].github_url = sug.url;
+                                          updated[idx].source = 'github_suggestion';
+                                          setProfile({ ...profile, projects: updated });
+                                        }}
+                                        className="text-xs px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 text-indigo-200 flex items-center gap-1.5 transition-all text-left group"
+                                        title={sug.description || sug.repo_name}
+                                      >
+                                        <Github className="w-3 h-3 text-indigo-300 group-hover:text-white" />
+                                        <span className="font-semibold">{sug.repo_name}</span>
+                                        <span className="text-[10px] text-indigo-300/70">({sug.score}%)</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Live Demo URL</span>
+                                </label>
+                                {!proj.demo_url && (
+                                  <span className="text-[11px] text-slate-500 italic">Optional</span>
+                                )}
+                              </div>
+                              <input
+                                type="url"
+                                placeholder="https://myproject.com"
+                                value={proj.demo_url || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.projects];
+                                  updated[idx].demo_url = e.target.value;
+                                  setProfile({ ...profile, projects: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Tech Stack Chip Input */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-sm font-medium text-slate-300">Technologies Used</label>
+                              <span className="text-[11px] text-slate-500">{(proj.tech_stack || []).length} technologies</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mb-2 min-h-[32px]">
+                              {(proj.tech_stack || []).map((tech) => (
+                                <span
+                                  key={tech}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-200 text-xs font-medium"
+                                >
+                                  <span>{tech}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeProjectTech(idx, tech)}
+                                    className="text-purple-400 hover:text-rose-400 ml-0.5"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Add technology (e.g. React, Docker, Redis) & press Enter..."
+                                value={projectTechInput[idx] || ''}
+                                onChange={(e) =>
+                                  setProjectTechInput((prev) => ({ ...prev, [idx]: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addProjectTech(idx, projectTechInput[idx]);
+                                  }
+                                }}
+                                className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white text-xs focus:border-purple-500 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => addProjectTech(idx, projectTechInput[idx])}
+                                className="px-3 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 text-xs font-semibold"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Bullets List */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-sm font-medium text-slate-300">
+                                Key Highlights & Architecture Points
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => addProjectBullet(idx)}
+                                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Add Bullet</span>
+                              </button>
+                            </div>
+                            <div className="space-y-1.5">
+                              {(proj.bullets || []).map((bullet, bIdx) => (
+                                <div key={bIdx} className="flex items-center gap-2">
+                                  <span className="text-purple-400 text-xs font-mono">•</span>
+                                  <input
+                                    type="text"
+                                    value={bullet}
+                                    onChange={(e) => updateProjectBullet(idx, bIdx, e.target.value)}
+                                    placeholder="Engineered high performance caching with 99.9% uptime..."
+                                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white text-xs focus:border-purple-500 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeProjectBullet(idx, bIdx)}
+                                    className="p-1 text-slate-500 hover:text-rose-400"
+                                    title="Remove bullet"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              {(proj.bullets || []).length === 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => addProjectBullet(idx)}
+                                  className="w-full py-2 border border-dashed border-white/10 rounded-lg text-xs text-slate-400 hover:text-purple-300 hover:border-purple-500/30 text-center"
+                                >
+                                  + Add first project highlight bullet
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. Categorized Technical Skills */}
+                <div className="glass-panel p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      <span>Categorized Technical Skills</span>
+                    </h3>
+                    <span className="text-xs text-slate-400">Verified Skills</span>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {['languages', 'frameworks', 'databases', 'tools', 'cloud_devops'].map((cat) => (
-                      <div key={cat} className="glass-card p-4 rounded-xl space-y-3">
+                      <div key={cat} className="glass-card p-4 rounded-xl space-y-3 border border-white/10">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
                             {cat.replace('_', ' ')}
@@ -817,7 +2340,7 @@ export default function OnboardingPage() {
                         <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                           <input
                             type="text"
-                            placeholder={`Add to ${cat}...`}
+                            placeholder={`Add to ${cat.replace('_', ' ')}...`}
                             value={newSkill.category === cat ? newSkill.value : ''}
                             onChange={(e) => setNewSkill({ category: cat, value: e.target.value })}
                             onKeyDown={(e) => {
@@ -841,108 +2364,276 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {/* 4. Experience Card */}
+                {/* 7. Certifications */}
                 <div className="glass-panel p-6 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      <Briefcase className="w-4 h-4 text-cyan-400" />
-                      Work Experience
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Award className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-base font-bold text-white">Certifications</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold">
+                        {(profile.certifications || []).length}
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      onClick={addExperience}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium flex items-center gap-1.5"
+                      onClick={addCertification}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 text-sm font-medium flex items-center gap-1.5 transition-all"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Experience</span>
+                      <Plus className="w-4 h-4" />
+                      <span>Add Certification</span>
                     </button>
                   </div>
 
-                  <div className="space-y-4">
-                    {profile.experience.map((exp, idx) => (
-                      <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative">
-                        <button
-                          type="button"
-                          onClick={() => removeExperience(idx)}
-                          className="absolute right-3 top-3 text-slate-500 hover:text-rose-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                          <div>
-                            <label className="text-[11px] text-slate-400">Company</label>
-                            <input
-                              type="text"
-                              value={exp.company || ''}
-                              onChange={(e) => {
-                                const updated = [...profile.experience];
-                                updated[idx].company = e.target.value;
-                                setProfile({ ...profile, experience: updated });
-                              }}
-                              className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-xs"
-                            />
+                  {(profile.certifications || []).length === 0 ? (
+                    <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
+                      <Award className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-sm font-medium text-slate-300">No certifications added yet</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Add cloud badges, industry certifications (AWS, GCP, CKA), or specialized accreditations.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addCertification}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 text-xs font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Certification</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(profile.certifications || []).map((cert, idx) => (
+                        <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative border border-white/10">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <span className="text-xs font-bold text-amber-400">Certification #{idx + 1}</span>
+                            {confirmDelete?.type === 'cert' && confirmDelete?.index === idx ? (
+                              <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-lg text-xs">
+                                <span className="text-[11px] text-rose-300">Delete?</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeCertification(idx)}
+                                  className="font-bold text-rose-400 hover:text-white"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete(null)}
+                                  className="text-slate-400 hover:text-white ml-1"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete({ type: 'cert', index: idx })}
+                                className="p-1 text-slate-500 hover:text-rose-400 rounded"
+                                title="Remove certification"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
-                          <div>
-                            <label className="text-[11px] text-slate-400">Role</label>
-                            <input
-                              type="text"
-                              value={exp.role || ''}
-                              onChange={(e) => {
-                                const updated = [...profile.experience];
-                                updated[idx].role = e.target.value;
-                                setProfile({ ...profile, experience: updated });
-                              }}
-                              className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-slate-400">Start Date</label>
-                            <input
-                              type="text"
-                              value={exp.start_date || ''}
-                              onChange={(e) => {
-                                const updated = [...profile.experience];
-                                updated[idx].start_date = e.target.value;
-                                setProfile({ ...profile, experience: updated });
-                              }}
-                              className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-slate-400">End Date</label>
-                            <input
-                              type="text"
-                              value={exp.end_date || ''}
-                              onChange={(e) => {
-                                const updated = [...profile.experience];
-                                updated[idx].end_date = e.target.value;
-                                setProfile({ ...profile, experience: updated });
-                              }}
-                              className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-xs"
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Certificate Name</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. AWS Solutions Architect"
+                                value={cert.name || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.certifications];
+                                  updated[idx].name = e.target.value;
+                                  setProfile({ ...profile, certifications: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Issuing Organization</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Amazon Web Services"
+                                value={cert.issuer || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.certifications];
+                                  updated[idx].issuer = e.target.value;
+                                  setProfile({ ...profile, certifications: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Issue Date</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 2023 or Nov 2023"
+                                value={cert.date || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.certifications];
+                                  updated[idx].date = e.target.value;
+                                  setProfile({ ...profile, certifications: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Credential URL</label>
+                              <input
+                                type="url"
+                                placeholder="https://..."
+                                value={cert.url || ''}
+                                onChange={(e) => {
+                                  const updated = [...profile.certifications];
+                                  updated[idx].url = e.target.value;
+                                  setProfile({ ...profile, certifications: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-                        {/* Bullets */}
-                        <div>
-                          <label className="text-[11px] text-slate-400">
-                            Key Achievements & Bullets (Action + Tech + Impact)
-                          </label>
-                          <textarea
-                            rows={3}
-                            value={(exp.bullets || []).join('\n')}
-                            onChange={(e) => {
-                              const updated = [...profile.experience];
-                              updated[idx].bullets = e.target.value.split('\n');
-                              setProfile({ ...profile, experience: updated });
-                            }}
-                            className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white text-xs font-mono leading-relaxed"
-                            placeholder="One bullet per line..."
-                          />
-                        </div>
-                      </div>
-                    ))}
+                {/* 8. Achievements */}
+                <div className="glass-panel p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-yellow-400" />
+                      <h3 className="text-base font-bold text-white">Achievements & Honors</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-xs font-semibold">
+                        {(profile.achievements || []).length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addAchievement}
+                      className="px-3.5 py-1.5 rounded-xl bg-yellow-600/20 hover:bg-yellow-600/30 border border-yellow-500/30 text-yellow-300 text-sm font-medium flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Achievement</span>
+                    </button>
                   </div>
+
+                  {(profile.achievements || []).length === 0 ? (
+                    <div className="p-8 rounded-xl bg-slate-900/40 border border-dashed border-white/10 text-center space-y-3">
+                      <Trophy className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-sm font-medium text-slate-300">No achievements added yet</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Add hackathon prizes, academic scholarships, open source recognitions, or competitive rankings.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addAchievement}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-yellow-600/30 hover:bg-yellow-600/50 text-yellow-200 text-xs font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Achievement</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(profile.achievements || []).map((ach, idx) => (
+                        <div key={idx} className="glass-card p-4 rounded-xl space-y-3 relative border border-white/10">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <span className="text-xs font-bold text-yellow-400">Achievement #{idx + 1}</span>
+                            {confirmDelete?.type === 'achievement' && confirmDelete?.index === idx ? (
+                              <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-lg text-xs">
+                                <span className="text-[11px] text-rose-300">Delete?</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAchievement(idx)}
+                                  className="font-bold text-rose-400 hover:text-white"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete(null)}
+                                  className="text-slate-400 hover:text-white ml-1"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete({ type: 'achievement', index: idx })}
+                                className="p-1 text-slate-500 hover:text-rose-400 rounded"
+                                title="Remove achievement"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="text-sm font-medium text-slate-300">Title / Award</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 1st Place - National Hackathon 2023"
+                                value={ach.title || ''}
+                                onChange={(e) => {
+                                  const updated = [...(profile.achievements || [])];
+                                  updated[idx].title = e.target.value;
+                                  setProfile({ ...profile, achievements: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Date / Year</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Oct 2023"
+                                value={ach.date || ''}
+                                onChange={(e) => {
+                                  const updated = [...(profile.achievements || [])];
+                                  updated[idx].date = e.target.value;
+                                  setProfile({ ...profile, achievements: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-300">Issuer / Organization</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Major League Hacking / University"
+                                value={ach.issuer || ''}
+                                onChange={(e) => {
+                                  const updated = [...(profile.achievements || [])];
+                                  updated[idx].issuer = e.target.value;
+                                  setProfile({ ...profile, achievements: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="text-sm font-medium text-slate-300">Description / Details</label>
+                              <input
+                                type="text"
+                                placeholder="Built an automated pipeline that won top prize among 200+ teams..."
+                                value={ach.description || ''}
+                                onChange={(e) => {
+                                  const updated = [...(profile.achievements || [])];
+                                  updated[idx].description = e.target.value;
+                                  setProfile({ ...profile, achievements: updated });
+                                }}
+                                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1261,6 +2952,201 @@ export default function OnboardingPage() {
                 <span>Complete Onboarding & Go to Profile</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Merge vs Replace Decision Modal */}
+        {mergeModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">New Resume Parsed</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      You already have an active profile saved. How would you like to apply the newly parsed data?
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMergeModalOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Option 1: Safest - Keep edits & fill empties */}
+                <div
+                  onClick={handleKeepAndFillEmpties}
+                  className="p-4 rounded-xl border border-indigo-500/40 bg-indigo-950/30 hover:bg-indigo-950/50 cursor-pointer transition-all space-y-1 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white group-hover:text-indigo-300 transition-colors">
+                      Keep my profile and only fill empty fields
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">
+                      Recommended (Safest)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Preserves any manual edits you made previously. Missing contact info, skills, and new projects from this resume are added.
+                  </p>
+                </div>
+
+                {/* Option 2: Replace */}
+                <div
+                  onClick={handleReplaceProfile}
+                  className="p-4 rounded-xl border border-white/10 bg-slate-800/40 hover:bg-slate-800/70 cursor-pointer transition-all space-y-1 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Replace my profile with the new data
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                      Overwrites All
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Replaces your current profile entirely with the newly parsed resume content.
+                  </p>
+                </div>
+
+                {/* Option 3: Review differences */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMergeModalOpen(false);
+                    setDiffModalOpen(true);
+                  }}
+                  className="w-full text-center py-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors cursor-pointer"
+                >
+                  Review differences first →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Diff Review Modal */}
+        {diffModalOpen && incomingProfile && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    Review Profile Differences
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Compare your saved Master Profile with the newly parsed resume data.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiffModalOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+                {/* Contact comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Contact Info</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current Saved</span>
+                      <p className="text-white font-medium">{profile.contact_info?.full_name || '(empty)'}</p>
+                      <p>{profile.contact_info?.email || '(empty)'}</p>
+                      <p>{profile.contact_info?.phone || '(empty)'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">New from Resume</span>
+                      <p className="text-white font-medium">{incomingProfile.contact_info?.full_name || '(empty)'}</p>
+                      <p>{incomingProfile.contact_info?.email || '(empty)'}</p>
+                      <p>{incomingProfile.contact_info?.phone || '(empty)'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Skills Comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Skills Count</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current Skills</span>
+                      <p className="text-white">
+                        {Object.values(profile.skills || {}).reduce((acc, l) => acc + (Array.isArray(l) ? l.length : 0), 0)} skills recorded
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">Incoming Skills</span>
+                      <p className="text-white">
+                        {Object.values(incomingProfile.skills || {}).reduce((acc, l) => acc + (Array.isArray(l) ? l.length : 0), 0)} skills detected
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Projects Comparison */}
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                  <span className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">Projects Detected</span>
+                  <div className="grid grid-cols-2 gap-3 text-slate-400">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-semibold mb-0.5">Current ({profile.projects?.length || 0})</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 mt-1">
+                        {(profile.projects || []).map((p, idx) => (
+                          <li key={idx} className="truncate">{p.title || 'Untitled Project'}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-400 block font-semibold mb-0.5">Incoming ({incomingProfile.projects?.length || 0})</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 mt-1">
+                        {(incomingProfile.projects || []).map((p, idx) => (
+                          <li key={idx} className="truncate">{p.title || 'Untitled Project'}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiffModalOpen(false);
+                    setMergeModalOpen(true);
+                  }}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReplaceProfile}
+                  className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold cursor-pointer"
+                >
+                  Replace All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeepAndFillEmpties}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 cursor-pointer"
+                >
+                  Keep My Edits & Fill Empties
+                </button>
+              </div>
             </div>
           </div>
         )}

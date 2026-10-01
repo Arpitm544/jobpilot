@@ -34,6 +34,69 @@ class ManualJobIngestRequest(BaseModel):
     apply_url: str
 
 
+async def _get_or_create_primary_profile(db: AsyncSession, current_user: User) -> MasterProfile:
+    """Fetch primary master profile or fallback to any existing profile / default template"""
+    prof_res = await db.execute(
+        select(MasterProfile).where(
+            MasterProfile.user_id == current_user.id,
+            MasterProfile.is_primary == True
+        )
+    )
+    profile = prof_res.scalar_one_or_none()
+    if not profile:
+        # Fallback to any profile belonging to user
+        any_res = await db.execute(
+            select(MasterProfile)
+            .where(MasterProfile.user_id == current_user.id)
+            .order_by(MasterProfile.version.desc())
+        )
+        profile = any_res.scalars().first()
+        if profile:
+            profile.is_primary = True
+            await db.commit()
+            await db.refresh(profile)
+
+    if not profile:
+        # Initialize default master profile template so user can discover jobs without crashing
+        profile = MasterProfile(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            version_name="Primary Master Profile",
+            version=1,
+            is_primary=True,
+            is_active=True,
+            contact_info={
+                "full_name": current_user.full_name or "",
+                "email": current_user.email,
+                "phone": "",
+                "location": "",
+                "linkedin": "",
+                "github": "",
+                "portfolio": ""
+            },
+            summary="",
+            skills={
+                "languages": [],
+                "frameworks": [],
+                "databases": [],
+                "tools": [],
+                "cloud_devops": [],
+                "soft_skills": []
+            },
+            experience=[],
+            projects=[],
+            education=[],
+            certifications=[],
+            achievements=[],
+            links=[]
+        )
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+
+    return profile
+
+
 @router.post("/discover", response_model=List[JobMatchResponse])
 async def trigger_discovery(
     current_user: User = Depends(get_current_user),
@@ -52,19 +115,8 @@ async def trigger_discovery(
         await db.commit()
         await db.refresh(prefs)
 
-    # 2. Fetch primary master profile
-    prof_res = await db.execute(
-        select(MasterProfile).where(
-            MasterProfile.user_id == current_user.id,
-            MasterProfile.is_primary == True
-        )
-    )
-    profile = prof_res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Master Profile not found. Please upload your resume first before discovering jobs."
-        )
+    # 2. Fetch or initialize primary master profile
+    profile = await _get_or_create_primary_profile(db, current_user)
 
     # 3. Run Discovery
     jobs = await discovery_service.discover_jobs_for_user(
@@ -183,12 +235,7 @@ async def manually_add_job(
     Manually paste any Job Description or custom URL to parse, score, and queue instantly.
     """
     # Check Master Profile
-    prof_res = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == current_user.id, MasterProfile.is_primary == True)
-    )
-    profile = prof_res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload your resume first.")
+    profile = await _get_or_create_primary_profile(db, current_user)
 
     pref_res = await db.execute(select(JobPreference).where(JobPreference.user_id == current_user.id))
     prefs = pref_res.scalar_one_or_none()

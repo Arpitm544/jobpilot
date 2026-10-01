@@ -13,6 +13,7 @@ from app.api.v1.tailor import router as tailor_router
 from app.api.v1.apply import router as apply_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.resumes import router as resumes_router
+from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.ws import router as ws_router
 
 # Configure logging
@@ -64,6 +65,8 @@ app.include_router(apply_router, prefix=settings.API_V1_STR)
 app.include_router(analytics_router, prefix=settings.API_V1_STR)
 app.include_router(resumes_router, prefix=settings.API_V1_STR)
 app.include_router(resumes_router)  # Allow direct /resumes/* endpoints as well
+app.include_router(onboarding_router, prefix=settings.API_V1_STR)
+app.include_router(onboarding_router)  # Allow direct /onboarding/* endpoints as well
 app.include_router(ws_router, prefix=settings.API_V1_STR)
 
 

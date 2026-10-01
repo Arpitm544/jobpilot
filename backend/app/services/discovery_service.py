@@ -39,6 +39,15 @@ def compute_dedupe_hash(company: str, title: str, location: str) -> str:
     return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
 
+def to_naive_utc(dt: Any) -> datetime:
+    """Ensure datetime is a timezone-naive UTC datetime object for Postgres TIMESTAMP WITHOUT TIME ZONE"""
+    if not dt or not isinstance(dt, datetime):
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 class DiscoveryService:
     def __init__(self):
         self.adapters = {
@@ -153,7 +162,7 @@ class DiscoveryService:
                             discovered_jobs.append(existing_job)
                         continue
 
-                    # Create new Job record
+                    # Create new Job record with timezone-naive datetimes for Postgres compatibility
                     new_job = Job(
                         id=uuid.uuid4(),
                         source_id=source.id,
@@ -169,8 +178,8 @@ class DiscoveryService:
                         ats_type=raw_job["ats_type"],
                         dedupe_hash=dedupe_hash,
                         is_active=True,
-                        posted_date=raw_job.get("posted_date") or datetime.now(timezone.utc),
-                        discovered_at=datetime.now(timezone.utc),
+                        posted_date=to_naive_utc(raw_job.get("posted_date")),
+                        discovered_at=datetime.now(timezone.utc).replace(tzinfo=None),
                     )
                     db.add(new_job)
                     discovered_jobs.append(new_job)

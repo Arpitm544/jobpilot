@@ -73,9 +73,11 @@ class LeverAdapter(BaseATSAdapter):
             posted_date = None
             if created_at_ts:
                 try:
-                    posted_date = datetime.fromtimestamp(created_at_ts / 1000.0, tz=timezone.utc)
+                    posted_date = datetime.fromtimestamp(created_at_ts / 1000.0, tz=timezone.utc).replace(tzinfo=None)
                 except Exception:
-                    posted_date = datetime.now(timezone.utc)
+                    posted_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            else:
+                posted_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Salary extraction
             salary_range = None

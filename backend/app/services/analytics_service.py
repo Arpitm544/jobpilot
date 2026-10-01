@@ -188,7 +188,10 @@ class AnalyticsService:
         title = job.title
         applied_days_ago = 7
         if application.applied_at:
-            applied_days_ago = max(1, (datetime.now(timezone.utc) - application.applied_at).days)
+            applied_at = application.applied_at
+            if applied_at.tzinfo is not None:
+                applied_at = applied_at.astimezone(timezone.utc).replace(tzinfo=None)
+            applied_days_ago = max(1, (datetime.now(timezone.utc).replace(tzinfo=None) - applied_at).days)
 
         prompt = f"""You are an executive career advisor writing a thoughtful follow-up email for a job application.
 Candidate Name: {candidate_name}
