@@ -162,6 +162,7 @@ def _normalize_projects_list(projects: List[Any]) -> List[Dict[str, Any]]:
 @router.get("", response_model=MasterProfileResponse)
 @router.get("/", response_model=MasterProfileResponse)
 @router.get("/master", response_model=MasterProfileResponse)
+@router.get("/primary", response_model=MasterProfileResponse)
 async def get_master_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)

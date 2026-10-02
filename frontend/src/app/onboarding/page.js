@@ -562,6 +562,32 @@ export default function OnboardingPage() {
         mergedEdu = incomingProfile.education || [];
       }
 
+      // Merge certifications: add new ones not already present (by name)
+      let mergedCerts = [...(prev.certifications || [])];
+      if (mergedCerts.length === 0) {
+        mergedCerts = incomingProfile.certifications || [];
+      } else {
+        const existingCertNames = new Set(mergedCerts.map((c) => c.name?.toLowerCase().trim()));
+        for (const c of incomingProfile.certifications || []) {
+          if (c.name && !existingCertNames.has(c.name.toLowerCase().trim())) {
+            mergedCerts.push(c);
+          }
+        }
+      }
+
+      // Merge achievements: add new ones not already present (by title)
+      let mergedAchievements = [...(prev.achievements || [])];
+      if (mergedAchievements.length === 0) {
+        mergedAchievements = incomingProfile.achievements || [];
+      } else {
+        const existingTitles = new Set(mergedAchievements.map((a) => a.title?.toLowerCase().trim()));
+        for (const a of incomingProfile.achievements || []) {
+          if (a.title && !existingTitles.has(a.title.toLowerCase().trim())) {
+            mergedAchievements.push(a);
+          }
+        }
+      }
+
       return {
         ...prev,
         contact_info: mergedContact,
@@ -570,8 +596,11 @@ export default function OnboardingPage() {
         projects: mergedProjects,
         experience: mergedExp,
         education: mergedEdu,
+        certifications: mergedCerts,
+        achievements: mergedAchievements,
       };
     });
+
 
     setMergeModalOpen(false);
     setDiffModalOpen(false);

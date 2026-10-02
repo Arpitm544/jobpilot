@@ -783,7 +783,18 @@ class ResumeParserService:
             "   - tech_stack: List of technologies used\n"
             "   - bullets: Key accomplishments\n"
             "6. Extract all education with institution, degree, field_of_study, dates, gpa.\n"
-            "7. Never fabricate URLs. If a project does not have a repo link, set github_url to null."
+            "7. Extract all Achievements & Honors into the 'achievements' list:\n"
+            "   Look for section headings like: 'Achievements', 'Honors', 'Awards', 'Recognition', 'Accomplishments',\n"
+            "   'Competitions', 'Hackathons', 'Coding Contests', 'Scholarships', 'Open Source Contributions'.\n"
+            "   For each achievement extract:\n"
+            "   - title: The name/title of the achievement (e.g. '1st Place - Smart India Hackathon 2023')\n"
+            "   - description: Brief description of what was achieved (1-2 sentences max), if present\n"
+            "   - date: Year or date string if present (e.g. '2023', 'Jan 2024')\n"
+            "   - issuer: Organization, platform, or event name that gave the award (e.g. 'LeetCode', 'HackerRank', 'Google', 'IIT Bombay')\n"
+            "   IMPORTANT: Extract ALL achievements — hackathon wins, competitive programming ranks, scholarship awards,\n"
+            "   open source recognitions, academic honors, certifications if listed under achievements, etc.\n"
+            "   Do NOT skip or omit any achievement entries found in the resume.\n"
+            "8. Never fabricate URLs. If a project does not have a repo link, set github_url to null."
         )
 
         prompt = (

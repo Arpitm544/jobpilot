@@ -55,6 +55,7 @@ class JobResponse(JobBase):
     classification_confidence: Optional[float] = None
     classification_evidence: List[Dict[str, Any]] = Field(default_factory=list)
     is_maybe_internship: bool = False
+    experience_level: Optional[str] = None # "fresher", "junior", "mid", "senior", "lead"
 
     model_config = {"from_attributes": True}
 

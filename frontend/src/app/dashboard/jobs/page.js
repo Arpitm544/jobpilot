@@ -7,7 +7,8 @@ import {
   Sparkles, Search, ExternalLink, CheckCircle2, AlertCircle, Loader2,
   Briefcase, MapPin, ChevronDown, ChevronUp, FileText,
   Check, GraduationCap, Globe, RefreshCw, Send, Settings,
-  Building2, Clock, Layers, Filter, ShieldCheck
+  Building2, Clock, Layers, Filter, ShieldCheck,
+  Award, Star, Zap
 } from 'lucide-react';
 import TailorModal from '@/components/tailor/TailorModal';
 import EligibilityBadge from '@/components/discovery/EligibilityBadge';
@@ -42,6 +43,7 @@ export default function JobsPage() {
   // Discovery interactive filter states
   const [roleType, setRoleType]             = useState('all');       // 'all' | 'internship' | 'full_time' | 'part_time'
   const [workplaceMode, setWorkplaceMode]   = useState('all');       // 'all' | 'remote' | 'onsite' | 'hybrid'
+  const [experienceLevel, setExperienceLevel] = useState('all');     // 'all' | 'fresher' | 'junior' | 'mid' | 'senior' | 'lead'
   const [selectedTargetRole, setSelectedTargetRole] = useState('all'); // 'all' | specific user target role
 
   // Load preferences once on mount
@@ -51,8 +53,8 @@ export default function JobsPage() {
       .catch(() => {});
   }, []);
 
-  // ── Fetch jobs with active role type & workplace filters ──────────────────
-  const fetchJobs = useCallback(async (rType = roleType, wMode = workplaceMode) => {
+  // ── Fetch jobs with active role type, workplace & experience filters ─────
+  const fetchJobs = useCallback(async (rType = roleType, wMode = workplaceMode, expLvl = experienceLevel) => {
     setLoading(true);
     setError('');
     try {
@@ -72,6 +74,10 @@ export default function JobsPage() {
         if (rType === 'internship') {
           params.include_fresher = true;
         }
+      }
+
+      if (expLvl && expLvl !== 'all') {
+        params.experience_level = expLvl.toLowerCase();
       }
 
       const [jobsRes, matchesRes] = await Promise.allSettled([
@@ -105,19 +111,19 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [roleType, workplaceMode]);
+  }, [roleType, workplaceMode, experienceLevel]);
 
   // Automatically fetch jobs on mount and when filter pills change
   useEffect(() => {
-    fetchJobs(roleType, workplaceMode);
-  }, [roleType, workplaceMode, fetchJobs]);
+    fetchJobs(roleType, workplaceMode, experienceLevel);
+  }, [roleType, workplaceMode, experienceLevel, fetchJobs]);
 
   // ── Background ATS crawl ──────────────────────────────────────────────────
   const triggerRefresh = async () => {
     setRefreshing(true);
     try {
       await api.post('/jobs/discover');
-      await fetchJobs(roleType, workplaceMode);
+      await fetchJobs(roleType, workplaceMode, experienceLevel);
       setMsg('Jobs refreshed from live ATS feeds!');
       setTimeout(() => setMsg(''), 5000);
     } catch {
@@ -181,7 +187,12 @@ export default function JobsPage() {
       }
     }
     
-    return searchMatch && scoreMatch && targetRoleMatch;
+    let expMatch = true;
+    if (experienceLevel && experienceLevel !== 'all') {
+      expMatch = m.job.experience_level === experienceLevel;
+    }
+
+    return searchMatch && scoreMatch && targetRoleMatch && expMatch;
   });
 
   const selectedCount = filteredMatches.filter(m => selected.has(m.id)).length;
@@ -347,6 +358,41 @@ export default function JobsPage() {
               })}
             </div>
           </div>
+
+          {/* 3. Experience / Seniority Level Pills */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2.5 border-t border-white/5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 w-24 shrink-0 flex items-center gap-1.5">
+              <Award className="w-3 h-3 text-purple-400" /> Experience:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'All Levels', icon: Sparkles },
+                { id: 'fresher', label: 'Freshers / Entry', icon: GraduationCap },
+                { id: 'junior', label: 'Junior (1-3 yrs)', icon: Zap },
+                { id: 'mid', label: 'Mid-Level (3-5 yrs)', icon: Briefcase },
+                { id: 'senior', label: 'Senior (5+ yrs)', icon: Star },
+                { id: 'lead', label: 'Lead / Staff', icon: ShieldCheck },
+              ].map(tab => {
+                const Icon = tab.icon;
+                const active = experienceLevel === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setExperienceLevel(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      active
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 border border-purple-400/40'
+                        : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${active ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Summary Strip */}
@@ -414,7 +460,7 @@ export default function JobsPage() {
             <p className="text-slate-400 text-sm">No jobs match your selected filters.</p>
             <div className="flex items-center justify-center gap-3 mt-4">
               <button
-                onClick={() => { setRoleType('all'); setWorkplaceMode('all'); setSearch(''); }}
+                onClick={() => { setRoleType('all'); setWorkplaceMode('all'); setExperienceLevel('all'); setSearch(''); }}
                 className="px-4 py-2 rounded-xl bg-slate-800 border border-white/10 hover:border-white/20 text-white text-xs font-semibold"
               >
                 Reset Filters
@@ -475,6 +521,21 @@ export default function JobsPage() {
                         {m.job.employment_type === 'internship' && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold">
                             Internship
+                          </span>
+                        )}
+                        {m.job.experience_level && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${
+                            m.job.experience_level === 'fresher' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
+                            m.job.experience_level === 'junior'  ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
+                            m.job.experience_level === 'mid'     ? 'bg-purple-500/15 border-purple-500/30 text-purple-300' :
+                            m.job.experience_level === 'senior'  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                            'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                          }`}>
+                            {m.job.experience_level === 'fresher' ? 'Fresher / Entry' :
+                             m.job.experience_level === 'junior' ? 'Junior (1-3y)' :
+                             m.job.experience_level === 'mid' ? 'Mid-Level (3-5y)' :
+                             m.job.experience_level === 'senior' ? 'Senior (5+y)' :
+                             'Lead / Staff'}
                           </span>
                         )}
                         {m.job.is_actively_hiring && (
