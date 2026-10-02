@@ -3,7 +3,8 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, desc
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, defer
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -12,7 +13,7 @@ from app.models.user import User
 from app.models.job import Job, JobMatch, Source, EligibilityResult, JobClassification
 from app.models.profile import MasterProfile
 from app.models.preference import JobPreference
-from app.schemas.job import JobResponse, JobMatchResponse, JobCreate, EligibilityResponse, EligibilityOverrideRequest
+from app.schemas.job import JobResponse, JobMatchResponse, JobCreate, EligibilityResponse, EligibilityOverrideRequest, JobDiscoveryResponse
 from app.api.deps import get_current_user, get_optional_current_user
 from app.services.discovery_service import discovery_service, compute_dedupe_hash
 from app.services.scoring_service import scoring_service
@@ -204,7 +205,7 @@ def is_remote_eligible_for_country(job, user_country: str) -> bool:
 
     loc = (job.location or "").lower()
     title = (job.title or "").lower()
-    jd = job.jd_text or ""
+    jd = job.__dict__.get("jd_text", "") or ""
     c = (job.country or "").upper().strip()
     wm = (job.work_mode or "").lower().strip()
 
@@ -392,9 +393,10 @@ async def trigger_discovery(
          "job": {"id": str(j.id), "title": j.title, "company_name": j.company_name}}
         for j in jobs[:10]
     ]
+import time
+_JOBS_CACHE = {}
 
-
-@router.get("", response_model=List[JobResponse])
+@router.get("", response_model=List[JobDiscoveryResponse])
 async def list_jobs(
     country: Optional[str] = Query(None, description="2-letter ISO country code"),
     city: Optional[str] = Query(None),
@@ -416,18 +418,23 @@ async def list_jobs(
 ):
     """
     Country-aware job discovery endpoint with strict internship mode.
-    Filters: country, city, work_mode, employment_type, include_fresher, include_maybe, stipend_min, posted_within, search, actively_hiring_only.
-    Ranks:
-    1. Home-country on-site/hybrid in preferred cities
-    2. Home-country remote
-    3. Remote roles user is eligible for (worldwide or allowed in country)
-    4. International roles (only if open_to_international is enabled)
-    Default feed mix: ~80% home country, 20% eligible remote.
     """
+    user_id = str(current_user.id) if current_user else "guest"
+    cache_key = f"{user_id}_{country}_{city}_{work_mode}_{employment_type}_{experience_level}_{include_fresher}_{include_maybe}_{stipend_min}_{posted_within}_{search}_{actively_hiring_only}_{sort}_{limit}_{offset}"
+    
+    if cache_key in _JOBS_CACHE:
+        cached_data, ts = _JOBS_CACHE[cache_key]
+        if time.time() - ts < 60:  # 60s cache
+            return cached_data
+
     now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff_active = now_utc - timedelta(days=45)
 
-    query = select(Job).options(selectinload(Job.classifications)).where(Job.is_active == True)
+    query = select(Job).options(
+        selectinload(Job.classifications),
+        defer(Job.jd_text),
+        defer(Job.jd_parsed_skills)
+    ).where(Job.is_active == True)
 
     if actively_hiring_only:
         # Exclude stale / zombie postings older than 45 days so candidates only see actively hiring roles
@@ -497,6 +504,10 @@ async def list_jobs(
 
     if isinstance(sort, str) and sort == "recent":
         query = query.order_by(desc(Job.posted_date))
+    else:
+        query = query.order_by(desc(Job.posted_date))
+
+    query = query.limit(100)
 
     result = await db.execute(query)
     all_jobs = result.scalars().all()
@@ -564,7 +575,7 @@ async def list_jobs(
         else:
             cls_res = job_classifier.classify_job_sync(
                 title=j.title,
-                jd_text=j.jd_text,
+                jd_text=j.__dict__.get("jd_text", ""),
                 raw_employment_type=j.job_type,
                 country=j.country
             )
@@ -669,7 +680,7 @@ async def list_jobs(
     # Attach dynamic eligibility verdict, experience level, and active hiring freshness metadata
     for rj in ranked_jobs:
         rj.eligibility_verdict = eligibility_map.get(str(rj.id))
-        rj.experience_level = detect_job_experience_level(rj.title, rj.jd_text, rj.employment_type)
+        rj.experience_level = detect_job_experience_level(rj.title, rj.__dict__.get("jd_text", ""), getattr(rj, "employment_type", "unknown"))
         ref_date = rj.posted_date or rj.discovered_at
         if ref_date:
             days = max(0, (now_utc - ref_date).days)
@@ -685,7 +696,11 @@ async def list_jobs(
 
     real_offset = offset if isinstance(offset, int) else 0
     real_limit = limit if isinstance(limit, int) else 50
-    return ranked_jobs[real_offset:real_offset + real_limit]
+    final_page = ranked_jobs[real_offset:real_offset + real_limit]
+    final_response = [JobDiscoveryResponse.model_validate(j) for j in final_page]
+    
+    _JOBS_CACHE[cache_key] = (final_response, time.time())
+    return final_response
 
 
 @router.get("/matches", response_model=List[JobMatchResponse])
@@ -699,9 +714,13 @@ async def list_job_matches(
     """List scored job matches with filtering by status and match threshold"""
     query = (
         select(JobMatch)
-        .options(selectinload(JobMatch.job))
+        .options(
+            selectinload(JobMatch.job).defer(Job.jd_text),
+            selectinload(JobMatch.job).defer(Job.jd_parsed_skills)
+        )
         .where(JobMatch.user_id == current_user.id)
         .order_by(desc(JobMatch.match_score))
+
     )
 
     if match_status and match_status != "all":

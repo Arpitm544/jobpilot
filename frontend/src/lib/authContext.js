@@ -8,16 +8,23 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [bootstrapData, setBootstrapData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Check current session from backend cookie
+  // Check current session and fetch bootstrap data from backend
   const checkUser = useCallback(async () => {
     try {
-      const res = await api.get('/auth/me');
-      setUser(res.data);
+      // Single call replacing /auth/me -> /onboarding/state -> /profile
+      const res = await api.get('/bootstrap');
+      setUser(res.data.user);
+      setBootstrapData({
+        onboarding: res.data.onboarding,
+        profileSummary: res.data.profile_summary
+      });
     } catch (err) {
       setUser(null);
+      setBootstrapData(null);
     } finally {
       setIsLoading(false);
     }
@@ -123,6 +130,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
+        bootstrapData,
         isLoading,
         loading: isLoading, // backwards compatibility
         isAuthenticated: !!user,

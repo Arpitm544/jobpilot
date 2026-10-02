@@ -74,7 +74,7 @@ B.S. in Computer Science | University of California, Berkeley
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, bootstrapData } = useAuth();
 
   const [step, setStep] = useState(1);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -410,14 +410,18 @@ export default function OnboardingPage() {
   const [newSkill, setNewSkill] = useState({ category: 'languages', value: '' });
 
   // Fetch onboarding state from backend and sync steps
-  const fetchOnboardingState = async (shouldSetInitialStep = false) => {
+  const fetchOnboardingState = async (shouldSetInitialStep = false, fallbackData = null) => {
     try {
       setStateError(false);
-      const res = await api.get('/onboarding/state');
-      if (res.data) {
-        setOnboardingState(res.data);
+      let data = fallbackData;
+      if (!data) {
+        const res = await api.get('/onboarding/state');
+        data = res.data;
+      }
+      if (data) {
+        setOnboardingState(data);
         if (shouldSetInitialStep) {
-          const lastCompleted = res.data.last_completed_step || 0;
+          const lastCompleted = data.last_completed_step || 0;
           if (lastCompleted >= 4) {
             setStep(1);
           } else {
@@ -433,28 +437,34 @@ export default function OnboardingPage() {
 
   const loadAllUserData = async () => {
     setStateLoading(true);
-    try {
-      await fetchOnboardingState(true);
 
-      const res = await api.get('/profile/master');
-      if (res.data) {
-        setProfile(mapApiProfileToForm(res.data, user));
-      }
-    } catch (e) {}
+    // If we have bootstrap data from the shell, use it to skip the onboarding state API call
+    if (bootstrapData?.onboarding) {
+      fetchOnboardingState(true, bootstrapData.onboarding);
+    } else {
+      fetchOnboardingState(true);
+    }
 
+    // Fetch form data concurrently to prevent waterfalls
     try {
-      const prefRes = await api.get('/preferences/');
-      if (prefRes.data) {
-        setPreferences((prev) => ({ ...prev, ...prefRes.data }));
-      }
-    } catch (e) {}
+      const [profRes, prefRes, qbRes] = await Promise.allSettled([
+        api.get('/profile/master'),
+        api.get('/preferences/'),
+        api.get('/profile/question-bank'),
+      ]);
 
-    try {
-      const qbRes = await api.get('/profile/question-bank');
-      if (qbRes.data) {
-        setQuestions((prev) => ({ ...prev, ...qbRes.data }));
+      if (profRes.status === 'fulfilled' && profRes.value.data) {
+        setProfile(mapApiProfileToForm(profRes.value.data, user));
       }
-    } catch (e) {}
+      if (prefRes.status === 'fulfilled' && prefRes.value.data) {
+        setPreferences((prev) => ({ ...prev, ...prefRes.value.data }));
+      }
+      if (qbRes.status === 'fulfilled' && qbRes.value.data) {
+        setQuestions((prev) => ({ ...prev, ...qbRes.value.data }));
+      }
+    } catch (e) {
+      console.error('Failed to load user data concurrently:', e);
+    }
 
     setStateLoading(false);
   };

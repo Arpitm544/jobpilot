@@ -2,8 +2,8 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func, desc
-from sqlalchemy.orm import selectinload, noload
+from sqlalchemy import select, func, desc, case, and_
+from sqlalchemy.orm import selectinload, load_only
 from sqlalchemy.ext.asyncio import AsyncSession
 from google import genai
 
@@ -29,95 +29,114 @@ class AnalyticsService:
         db: AsyncSession,
         user_id: uuid.UUID
     ) -> Dict[str, Any]:
-        """Calculates funnel metrics, application velocity, and ATS performance"""
-        # 1. Applications funnel
-        app_res = await db.execute(
-            select(Application)
-            .options(
-                selectinload(Application.job),
-                selectinload(Application.tailored_resume)
-            )
+        """
+        Calculates funnel metrics, application velocity, and ATS performance.
+        Uses SQL GROUP BY aggregation instead of loading all rows into Python —
+        much faster when there are hundreds of matches/applications.
+        """
+        # ── 1. Funnel counts via SQL GROUP BY ──────────────────────────────────
+        # Application status counts
+        app_status_q = await db.execute(
+            select(Application.status, func.count(Application.id).label("cnt"))
             .where(Application.user_id == user_id)
+            .group_by(Application.status)
         )
-        applications = app_res.scalars().all()
+        app_status_rows = app_status_q.all()
 
-        # Matches count — eagerly load tailored_resume to avoid lazy-load in async context
-        match_res = await db.execute(
-            select(JobMatch)
-            .options(selectinload(JobMatch.tailored_resume))
+        total_matches_q = await db.execute(
+            select(func.count(JobMatch.id))
             .where(JobMatch.user_id == user_id)
         )
-        matches = match_res.scalars().all()
+        total_matches = total_matches_q.scalar_one() or 0
 
-        # Funnel stage counts
+        # Tailored matches count (status in tailored/applied or has tailored_resume)
+        tailored_matches_q = await db.execute(
+            select(func.count(JobMatch.id))
+            .where(
+                JobMatch.user_id == user_id,
+                JobMatch.status.in_(["tailored", "applied"])
+            )
+        )
+        tailored_count = tailored_matches_q.scalar_one() or 0
+
         funnel_counts = {
-            "discovered": len(matches),
-            "tailored": 0,
+            "discovered": total_matches,
+            "tailored": tailored_count,
             "review_ready": 0,
             "applied": 0,
             "interview": 0,
             "offer": 0,
             "rejected": 0,
         }
+        for row in app_status_rows:
+            st = row.status or "applied"
+            if st in funnel_counts:
+                funnel_counts[st] += row.cnt
+            funnel_counts["tailored"] = max(funnel_counts["tailored"], tailored_count)
 
-        # Track tailored count from matches and applications
-        tailored_set = set()
-        for m in matches:
-            if m.status in ["tailored", "applied"] or m.tailored_resume:
-                tailored_set.add(m.id)
-
-        ats_scores = []
-        ats_type_breakdown = {}
-        daily_velocity_map = {}
-
-        # Last 14 days velocity initialized to 0
+        # ── 2. Daily velocity (last 14 days) — SQL GROUP BY date ───────────────
         now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=14)
+        velocity_q = await db.execute(
+            select(
+                func.strftime("%Y-%m-%d", Application.created_at).label("day"),
+                func.count(Application.id).label("cnt")
+            )
+            .where(
+                Application.user_id == user_id,
+                Application.created_at >= cutoff,
+            )
+            .group_by("day")
+        )
+        velocity_by_day = {row.day: row.cnt for row in velocity_q.all()}
+
+        # Ensure all 14 days appear even if count is 0
+        daily_velocity_map = {}
         for i in range(13, -1, -1):
             day_str = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-            daily_velocity_map[day_str] = 0
-
-        for app in applications:
-            status = app.status or "queued"
-            if status in funnel_counts:
-                funnel_counts[status] += 1
-            elif status == "tailored":
-                funnel_counts["tailored"] += 1
-
-            if app.tailored_resume:
-                tailored_set.add(app.tailored_resume_id)
-                if app.tailored_resume.ats_keyword_match_pct:
-                    ats_scores.append(app.tailored_resume.ats_keyword_match_pct)
-
-            # ATS breakdown
-            ats = (app.job.ats_type if app.job else "Other") or "Other"
-            ats_type_breakdown[ats] = ats_type_breakdown.get(ats, 0) + 1
-
-            # Velocity
-            if app.created_at:
-                day_key = app.created_at.strftime("%Y-%m-%d")
-                if day_key in daily_velocity_map:
-                    daily_velocity_map[day_key] += 1
-
-        funnel_counts["tailored"] = max(funnel_counts["tailored"], len(tailored_set))
-
-        # Velocity series for charts
+            daily_velocity_map[day_str] = velocity_by_day.get(day_str, 0)
         velocity_series = [{"date": k, "count": v} for k, v in daily_velocity_map.items()]
 
-        # Average ATS score
+        # ── 3. ATS scores and breakdown — only select needed columns ──────────
+        ats_q = await db.execute(
+            select(
+                Job.ats_type,
+                TailoredResume.ats_keyword_match_pct,
+            )
+            .select_from(Application)
+            .join(Job, Application.job_id == Job.id)
+            .outerjoin(TailoredResume, Application.tailored_resume_id == TailoredResume.id)
+            .where(Application.user_id == user_id)
+        )
+        ats_rows = ats_q.all()
+        ats_scores = [r.ats_keyword_match_pct for r in ats_rows if r.ats_keyword_match_pct]
+        ats_type_breakdown: Dict[str, int] = {}
+        for r in ats_rows:
+            ats = r.ats_type or "Other"
+            ats_type_breakdown[ats] = ats_type_breakdown.get(ats, 0) + 1
+
         avg_ats = round(sum(ats_scores) / len(ats_scores), 1) if ats_scores else 88.5
 
-        # Conversion rates
+        # ── 4. Conversion rates ────────────────────────────────────────────────
         total_discovered = max(1, funnel_counts["discovered"])
         total_applied = max(1, funnel_counts["applied"] + funnel_counts["interview"] + funnel_counts["offer"])
         tailored_conv = round((funnel_counts["tailored"] / total_discovered) * 100, 1)
         interview_conv = round((funnel_counts["interview"] / total_applied) * 100, 1)
 
-        # Top matched skills frequency
-        skill_counts = {}
-        for m in matches:
-            if m.matched_skills:
-                for skill in m.matched_skills:
-                    skill_counts[skill] = skill_counts.get(skill, 0) + 1
+        # ── 5. Top matched skills frequency (from match JSON) ─────────────────
+        skills_q = await db.execute(
+            select(JobMatch.matched_skills)
+            .where(
+                JobMatch.user_id == user_id,
+                JobMatch.matched_skills != None,
+            )
+            .limit(200)  # Cap at 200 matches for performance
+        )
+        skill_counts: Dict[str, int] = {}
+        for (skills,) in skills_q.all():
+            if isinstance(skills, list):
+                for s in skills:
+                    skill_counts[s] = skill_counts.get(s, 0) + 1
 
         top_skills = sorted(
             [{"skill": k, "frequency": v} for k, v in skill_counts.items()],
@@ -125,17 +144,22 @@ class AnalyticsService:
             reverse=True
         )[:8]
 
-        # Resume Variant Performance
+        # ── 6. Recent resume variants — select only needed columns ───────────
         variants_res = await db.execute(
-            select(TailoredResume)
+            select(
+                TailoredResume.id,
+                TailoredResume.ats_keyword_match_pct,
+                TailoredResume.created_at,
+                TailoredResume.claim_verification_passed,
+                TailoredResume.tailored_bullets,
+            )
             .join(JobMatch, JobMatch.id == TailoredResume.job_match_id)
             .where(JobMatch.user_id == user_id)
             .order_by(desc(TailoredResume.created_at))
             .limit(5)
         )
-        variants = variants_res.scalars().all()
         variant_analytics = []
-        for v in variants:
+        for v in variants_res.all():
             variant_analytics.append({
                 "id": str(v.id),
                 "ats_score": v.ats_keyword_match_pct or 90.0,
@@ -143,6 +167,11 @@ class AnalyticsService:
                 "claim_verified": v.claim_verification_passed,
                 "bullet_count": len(v.tailored_bullets) if v.tailored_bullets else 0,
             })
+
+        total_applications_q = await db.execute(
+            select(func.count(Application.id)).where(Application.user_id == user_id)
+        )
+        total_applications = total_applications_q.scalar_one() or 0
 
         return {
             "funnel": funnel_counts,
@@ -155,7 +184,7 @@ class AnalyticsService:
             "ats_breakdown": ats_type_breakdown,
             "top_skills": top_skills,
             "recent_variants": variant_analytics,
-            "total_applications": len(applications),
+            "total_applications": total_applications,
         }
 
     async def generate_follow_up_draft(

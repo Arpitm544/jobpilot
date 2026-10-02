@@ -11,7 +11,6 @@ class JobBase(BaseModel):
     workplace_type: str = "Remote" # Legacy field
     job_type: str = "Full-time" # Legacy field
     salary_range: Optional[str] = None
-    jd_text: str
     apply_url: str
     ats_type: str = "generic"
 
@@ -36,12 +35,14 @@ class JobBase(BaseModel):
 
 
 class JobCreate(JobBase):
+    jd_text: str
     source_name: Optional[str] = "manual"
     external_id: Optional[str] = None
     posted_date: Optional[datetime] = None
 
 
 class JobResponse(JobBase):
+    jd_text: str
     id: uuid.UUID
     source_id: Optional[uuid.UUID] = None
     external_id: Optional[str] = None
@@ -60,6 +61,25 @@ class JobResponse(JobBase):
     model_config = {"from_attributes": True}
 
 
+class JobDiscoveryResponse(JobBase):
+    id: uuid.UUID
+    source_id: Optional[uuid.UUID] = None
+    external_id: Optional[str] = None
+    is_active: bool = True
+    posted_date: Optional[datetime] = None
+    discovered_at: datetime
+    eligibility_verdict: Optional[str] = None
+    is_actively_hiring: bool = True
+    days_since_posted: Optional[int] = None
+    classification_confidence: Optional[float] = None
+    classification_evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    is_maybe_internship: bool = False
+    experience_level: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+
 class JobMatchResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID
@@ -72,7 +92,7 @@ class JobMatchResponse(BaseModel):
     match_rationale: Optional[str] = None
     status: str
     evaluated_at: datetime
-    job: JobResponse
+    job: JobDiscoveryResponse
 
     model_config = {"from_attributes": True}
 

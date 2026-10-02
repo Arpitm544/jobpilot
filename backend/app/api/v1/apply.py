@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from datetime import datetime, timezone
 from sqlalchemy import select, desc, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, load_only
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -114,30 +114,37 @@ async def get_pipeline_board(
     Returns candidate applications & scored job matches aggregated by Kanban pipeline stages:
     'discovered', 'queued', 'tailored', 'review_ready', 'applied', 'interview', 'offer', 'rejected'
     """
+    # Slim job columns needed for pipeline cards only (omit jd_text which can be KBs)
+    _job_cols = load_only(
+        Job.id, Job.title, Job.company_name, Job.location,
+        Job.workplace_type, Job.ats_type, Job.apply_url,
+    )
+
     # 1. Fetch all applications
     app_res = await db.execute(
         select(Application)
         .options(
-            selectinload(Application.job),
-            selectinload(Application.tailored_resume)
+            selectinload(Application.job).options(_job_cols),
+            selectinload(Application.tailored_resume).load_only(TailoredResume.id),
         )
         .where(Application.user_id == current_user.id)
         .order_by(desc(Application.updated_at))
     )
     applications = app_res.scalars().all()
 
-    # 2. Fetch all job matches (dismissed ones are permanently hidden)
+    # 2. Fetch job matches (dismissed ones are permanently hidden) — cap at 200 for the board
     match_res = await db.execute(
         select(JobMatch)
         .options(
-            selectinload(JobMatch.job),
-            selectinload(JobMatch.tailored_resume)
+            selectinload(JobMatch.job).options(_job_cols),
+            selectinload(JobMatch.tailored_resume).load_only(TailoredResume.id),
         )
         .where(
             JobMatch.user_id == current_user.id,
             JobMatch.status != "dismissed"
         )
         .order_by(desc(JobMatch.match_score))
+        .limit(200)
     )
     matches = match_res.scalars().all()
 
