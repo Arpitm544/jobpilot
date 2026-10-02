@@ -2,14 +2,36 @@
 // Supports: Greenhouse, Lever, Ashby, LinkedIn, Workday, SmartRecruiters, Indeed, BambooHR, and Custom Career Sites.
 
 (function () {
-  // Prevent duplicate script execution
   if (window.__jobpilot_copilot_initialized) return;
   window.__jobpilot_copilot_initialized = true;
 
-  console.log("JobPilot Copilot v1.1.0 loaded.");
+  console.log("[JobPilot Copilot] Active on page:", window.location.href);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 1. ATS Detection
+  // 1. Sync Token from JobPilot Web App (localhost:3000)
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    const syncToken = () => {
+      try {
+        const token = localStorage.getItem("jobpilot_token");
+        if (token) {
+          chrome.storage.local.set({ jobpilot_token: token });
+        }
+      } catch (e) {}
+    };
+
+    syncToken();
+    window.addEventListener("storage", (e) => {
+      if (e.key === "jobpilot_token" && e.newValue) {
+        chrome.storage.local.set({ jobpilot_token: e.newValue });
+      }
+    });
+    // Also periodically sync in case of login without reload
+    setInterval(syncToken, 3000);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2. ATS Detection
   // ─────────────────────────────────────────────────────────────────────────────
   function detectATS() {
     const host = window.location.hostname.toLowerCase();
@@ -26,7 +48,6 @@
     if (host.includes("bamboohr.com")) return "bamboohr";
     if (host.includes("indeed.com")) return "indeed";
 
-    // Generic career portal checks
     if (url.includes("/job/") || url.includes("/jobs/") || url.includes("/career/") || url.includes("/careers/") || url.includes("/openings/")) {
       return "careers";
     }
@@ -34,7 +55,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 2. Structured Job Details Extractor
+  // 3. Structured Job Details Extractor
   // ─────────────────────────────────────────────────────────────────────────────
   function extractJobDetails() {
     const ats = detectATS();
@@ -43,7 +64,7 @@
     let location = "Remote";
     let jdText = "";
 
-    // ── Method A: Parse JSON-LD Schema (Industry Standard for JobPostings) ──
+    // Method A: Parse JSON-LD Schema (Industry Standard)
     try {
       const scripts = document.querySelectorAll('script[type="application/ld+json"]');
       for (const script of scripts) {
@@ -68,7 +89,7 @@
       }
     } catch (e) {}
 
-    // ── Method B: Platform-Specific Selectors ────────────────────────────────
+    // Method B: Platform-Specific Selectors
     if (!title || !company) {
       if (ats === "greenhouse") {
         title = title || document.querySelector(".app-title, h1.job-title, h1.app__title, #header h1, h1")?.innerText?.trim() || "";
@@ -98,7 +119,7 @@
       }
     }
 
-    // ── Method C: OpenGraph & General Meta Tag Fallbacks ─────────────────────
+    // Method C: OpenGraph & General Meta Tag Fallbacks
     if (!title) {
       title = document.querySelector('meta[property="og:title"]')?.content ||
               document.querySelector('meta[name="twitter:title"]')?.content ||
@@ -111,7 +132,6 @@
                 document.querySelector('meta[name="author"]')?.content ||
                 document.title.split(/[-|–]/)[0]?.trim() ||
                 window.location.hostname.replace(/^(www\.|jobs\.|careers\.)/, "").split(".")[0];
-      // Capitalize company name cleanly
       if (company && company.length < 30) {
         company = company.charAt(0).toUpperCase() + company.slice(1);
       }
@@ -123,7 +143,7 @@
 
     return {
       atsType: ats,
-      title: (title || document.title || "Software Engineer").replace(/\s+/g, " ").trim(),
+      title: (title || document.title || "Job Posting").replace(/\s+/g, " ").trim(),
       company: (company || "Company").replace(/\s+/g, " ").trim(),
       location: (location || "Remote").replace(/\s+/g, " ").trim(),
       jdText: jdText.replace(/\s+/g, " ").trim(),
@@ -132,13 +152,42 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 3. Ultra-Robust Form Auto-Filler
+  // 4. Reliable Reactive Field Value Setter
   // ─────────────────────────────────────────────────────────────────────────────
   function setNativeValue(element, value) {
     if (!element || value == null) return;
     try {
       const isInput = element instanceof HTMLInputElement;
       const isTextArea = element instanceof HTMLTextAreaElement;
+      const isSelect = element instanceof HTMLSelectElement;
+
+      if (isSelect) {
+        // Dropdown selection matching
+        const valStr = String(value).toLowerCase();
+        let matched = false;
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const optText = (opt.text || "").toLowerCase();
+          const optVal = (opt.value || "").toLowerCase();
+          if (optText.includes(valStr) || optVal === valStr) {
+            element.selectedIndex = i;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched && (valStr === "yes" || valStr === "1")) {
+          // Find affirmative option
+          for (let i = 0; i < element.options.length; i++) {
+            if (element.options[i].text.toLowerCase().includes("yes")) {
+              element.selectedIndex = i;
+              break;
+            }
+          }
+        }
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        return;
+      }
+
       const prototype = isInput ? HTMLInputElement.prototype : (isTextArea ? HTMLTextAreaElement.prototype : Object.getPrototypeOf(element));
       const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
 
@@ -159,10 +208,52 @@
     }
   }
 
+  // Extracts dedicated field text without whole-form container leakage
+  function getFieldLabelText(el) {
+    const parts = [];
+
+    // 1. Direct label[for="id"]
+    if (el.id) {
+      try {
+        const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (lbl) parts.push(lbl.innerText);
+      } catch (e) {}
+    }
+
+    // 2. Direct parent <label>
+    const parentLabel = el.closest("label");
+    if (parentLabel) parts.push(parentLabel.innerText);
+
+    // 3. Label within immediate parent container (ONLY if container has <= 2 inputs to prevent whole-form leakage)
+    const container = el.parentElement;
+    if (container && container.querySelectorAll("input, select, textarea").length <= 2) {
+      const siblingLabel = container.querySelector("label, [class*='label'], .title, legend");
+      if (siblingLabel) parts.push(siblingLabel.innerText);
+    }
+
+    // 4. Input attributes
+    if (el.placeholder) parts.push(el.placeholder);
+    if (el.getAttribute("aria-label")) parts.push(el.getAttribute("aria-label"));
+    if (el.name) parts.push(el.name);
+    if (el.id) parts.push(el.id);
+    if (el.getAttribute("autocomplete")) parts.push(el.getAttribute("autocomplete"));
+    if (el.getAttribute("data-automation-id")) parts.push(el.getAttribute("data-automation-id"));
+
+    return parts.join(" ").toLowerCase();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 5. Intelligent Multi-Field Form Auto-Filler
+  // ─────────────────────────────────────────────────────────────────────────────
   function autofillPage(profile) {
-    const contact = profile?.contact_info || {};
-    const fullName = contact.full_name || "Candidate";
-    const nameParts = fullName.trim().split(/\s+/);
+    if (!profile) {
+      console.warn("[JobPilot Copilot] No user profile provided for autofill.");
+      return 0;
+    }
+
+    const contact = profile.contact_info || {};
+    const fullName = (contact.full_name || "").trim();
+    const nameParts = fullName.split(/\s+/);
     const firstName = nameParts[0] || "";
     const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
     const email = contact.email || "";
@@ -171,94 +262,106 @@
     const linkedin = contact.linkedin || "";
     const github = contact.github || "";
     const website = contact.portfolio || github || linkedin;
-    const summary = profile?.summary || "";
+    const summary = profile.summary || "";
+    const currentCompany = profile.experience?.[0]?.company || "";
+    const currentTitle = profile.experience?.[0]?.title || "";
+    const school = profile.education?.[0]?.institution || "";
+    const degree = profile.education?.[0]?.degree || "";
 
+    const inputs = Array.from(document.querySelectorAll("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea, select"));
     let filledCount = 0;
     const filledElements = new Set();
 
-    // Helper: Find input elements by checking label text, name, id, placeholder, and aria-label
-    function findInput(keywords, typeCheck = null) {
-      const inputs = Array.from(document.querySelectorAll("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea"));
+    const FIELD_RULES = [
+      {
+        patterns: [/\bfirst\s*name\b/i, /\bgiven\s*name\b/i, /^first_name$/i, /^firstname$/i, /fname/i],
+        value: firstName,
+      },
+      {
+        patterns: [/\blast\s*name\b/i, /\bfamily\s*name\b/i, /\bsurname\b/i, /^last_name$/i, /^lastname$/i, /lname/i],
+        value: lastName,
+      },
+      {
+        patterns: [/\bfull\s*name\b/i, /\bcandidate\s*name\b/i, /\byour\s*name\b/i, /^name$/i],
+        value: fullName,
+        condition: () => !Array.from(filledElements).some(el => el.name?.includes("first") || el.id?.includes("first")),
+      },
+      {
+        patterns: [/\be-?mail\b/i],
+        value: email,
+      },
+      {
+        patterns: [/\bphone\b/i, /\bmobile\b/i, /\btelephone\b/i, /\bcontact\s*number\b/i],
+        value: phone,
+      },
+      {
+        patterns: [/\blinked\s*in\b/i],
+        value: linkedin,
+      },
+      {
+        patterns: [/\bgit\s*hub\b/i],
+        value: github,
+      },
+      {
+        patterns: [/\bportfolio\b/i, /\bwebsite\b/i, /\bpersonal\s*(?:site|url|link)\b/i, /\bother\s*website\b/i],
+        value: website,
+      },
+      {
+        patterns: [/\bcity\b/i, /\blocation\b/i, /\bcurrent\s*location\b/i, /\baddress\b/i],
+        value: location,
+      },
+      {
+        patterns: [/\bcurrent\s*company\b/i, /\bcurrent\s*employer\b/i, /\bmost\s*recent\s*company\b/i, /^org$/i],
+        value: currentCompany,
+      },
+      {
+        patterns: [/\bcurrent\s*(?:job\s*)?title\b/i, /\bcurrent\s*role\b/i],
+        value: currentTitle,
+      },
+      {
+        patterns: [/\buniversity\b/i, /\bcollege\b/i, /\bschool\b/i, /\binstitution\b/i],
+        value: school,
+      },
+      {
+        patterns: [/\bdegree\b/i, /\bqualification\b/i],
+        value: degree,
+      },
+      {
+        patterns: [/\bcover\s*letter\b/i, /\bsummary\b/i, /\badditional\s*info/i, /\bcomments\b/i],
+        value: summary,
+      },
+    ];
 
-      for (const input of inputs) {
-        if (filledElements.has(input) || (input.value && input.value.trim().length > 0)) continue;
+    // Pass 1: Fill text inputs, textareas, and selects based on field rules
+    for (const rule of FIELD_RULES) {
+      if (!rule.value) continue;
+      if (rule.condition && !rule.condition()) continue;
 
-        if (typeCheck && input.type !== typeCheck && typeCheck !== "text") continue;
+      for (const el of inputs) {
+        if (filledElements.has(el)) continue;
+        if (el.value && el.value.trim().length > 0) continue;
 
-        // 1. Check ID, name, placeholder, aria-label
-        const attrs = [
-          input.id,
-          input.name,
-          input.placeholder,
-          input.getAttribute("aria-label"),
-          input.getAttribute("autocomplete"),
-          input.getAttribute("data-automation-id")
-        ].filter(Boolean).map(s => s.toLowerCase());
+        const labelText = getFieldLabelText(el);
+        const matches = rule.patterns.some(p => p.test(labelText));
 
-        // 2. Check associated label
-        let labelText = "";
-        if (input.id) {
-          const lbl = document.querySelector(`label[for="${input.id}"]`);
-          if (lbl) labelText += " " + lbl.innerText;
-        }
-        const parentLabel = input.closest("label, .field, .form-group, [class*='field'], [class*='question']");
-        if (parentLabel) labelText += " " + parentLabel.innerText;
-
-        const combined = attrs.join(" ") + " " + labelText.toLowerCase();
-
-        for (const kw of keywords) {
-          if (combined.includes(kw.toLowerCase())) {
-            return input;
-          }
+        if (matches) {
+          setNativeValue(el, rule.value);
+          filledElements.add(el);
+          filledCount++;
+          break;
         }
       }
-      return null;
     }
 
-    function fillField(keywords, value, typeCheck = null) {
-      if (!value) return;
-      const el = findInput(keywords, typeCheck);
-      if (el) {
-        setNativeValue(el, value);
-        filledElements.add(el);
-        filledCount++;
-      }
-    }
-
-    // ── Standard Identity & Contact Fields ──
-    fillField(["first_name", "firstname", "first name", "given name", "given-name"], firstName);
-    fillField(["last_name", "lastname", "last name", "family name", "surname", "family-name"], lastName);
-
-    // Full name fallback if separate fields weren't matched
-    if (!filledElements.size || Array.from(filledElements).every(el => !el.name?.includes("first"))) {
-      fillField(["full_name", "fullname", "full name", "your name", "candidate name", "name"], fullName);
-    }
-
-    fillField(["email", "e-mail", "email address"], email, "email");
-    fillField(["phone", "telephone", "mobile", "contact number", "phone number"], phone, "tel");
-
-    // ── Location & Address ──
-    fillField(["location", "city", "current city", "address", "current location"], location);
-
-    // ── Online Links / Socials ──
-    fillField(["linkedin", "linked in", "linkedin profile", "linkedin url"], linkedin);
-    fillField(["github", "git hub", "github url", "github profile"], github);
-    fillField(["portfolio", "website", "personal website", "portfolio url", "personal link", "other website"], website);
-
-    // ── Cover Letter / Summary / Comments ──
-    if (summary) {
-      fillField(["summary", "cover letter", "bio", "additional information", "comments", "notes"], summary);
-    }
-
-    // ── Work Authorization & Radio/Checkbox Questions ──
+    // Pass 2: Work Authorization & Visa Sponsorship Radios / Checkboxes
     try {
-      const radioGroups = document.querySelectorAll("input[type='radio'], input[type='checkbox']");
-      for (const radio of radioGroups) {
-        const parent = radio.closest("fieldset, .field, .question, [class*='question'], div");
+      const radios = document.querySelectorAll("input[type='radio'], input[type='checkbox']");
+      for (const radio of radios) {
+        const parent = radio.closest("fieldset, .field, [class*='question'], [class*='field'], tr, div");
         if (!parent) continue;
         const qText = parent.innerText.toLowerCase();
 
-        // Question: Are you authorized to work in India / this country?
+        // Legal authorization to work in country
         if (qText.includes("authorized to work") || qText.includes("legally authorized") || qText.includes("right to work") || qText.includes("18 years of age")) {
           const radioLabel = (radio.labels?.[0]?.innerText || radio.parentElement?.innerText || radio.value || "").toLowerCase();
           if (radioLabel.includes("yes") && !radio.checked) {
@@ -268,7 +371,7 @@
           }
         }
 
-        // Question: Will you require visa sponsorship?
+        // Future visa sponsorship
         if (qText.includes("require sponsorship") || qText.includes("visa sponsorship") || qText.includes("sponsorship in the future")) {
           const radioLabel = (radio.labels?.[0]?.innerText || radio.parentElement?.innerText || radio.value || "").toLowerCase();
           if (radioLabel.includes("no") && !radio.checked) {
@@ -280,22 +383,25 @@
       }
     } catch (e) {}
 
+    console.log(`[JobPilot Copilot] Auto-filled ${filledCount} fields.`);
     return filledCount;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 4. Floating Action Widget (Glassmorphic In-Page Pill)
+  // 6. Floating In-Page Widget (Pill Button)
   // ─────────────────────────────────────────────────────────────────────────────
   function injectFloatingPill() {
     if (document.getElementById("jobpilot-floating-widget")) return;
 
-    // Check if current page looks like a job or application form
-    const isJobPage = detectATS() !== "general" ||
-                      window.location.href.includes("job") ||
-                      window.location.href.includes("career") ||
-                      document.querySelector("input[name*='name'], input[type='email'], #first_name, .app-title, .job-title");
+    // Don't show on JobPilot internal web app itself
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") return;
 
-    if (!isJobPage) return;
+    // Check if current page is relevant (job posting, application form, or ATS)
+    const ats = detectATS();
+    const hasJobUrl = window.location.href.includes("job") || window.location.href.includes("career");
+    const hasFormFields = !!document.querySelector("input[name*='name'], input[type='email'], #first_name, #email, .app-title, .job-title");
+
+    if (ats === "general" && !hasJobUrl && !hasFormFields) return;
 
     const widget = document.createElement("div");
     widget.id = "jobpilot-floating-widget";
@@ -313,19 +419,19 @@
         <button id="jp-autofill-btn" class="jp-pill-btn-primary" title="Autofill this application form with your Master Profile">
           <span>⚡ Auto-Fill</span>
         </button>
-        <button id="jp-close-btn" class="jp-pill-close" title="Dismiss widget on this page">✕</button>
+        <button id="jp-close-btn" class="jp-pill-close" title="Dismiss widget">✕</button>
       </div>
     `;
 
     document.body.appendChild(widget);
 
-    // Close button
+    // Dismiss
     document.getElementById("jp-close-btn")?.addEventListener("click", () => {
       widget.remove();
     });
 
-    // In-page 1-Click Clip button
-    document.getElementById("jp-clip-btn")?.addEventListener("click", async () => {
+    // 1-Click Clip
+    document.getElementById("jp-clip-btn")?.addEventListener("click", () => {
       const btn = document.getElementById("jp-clip-btn");
       if (!btn) return;
       btn.disabled = true;
@@ -348,7 +454,7 @@
           btn.style.background = "#10b981";
         } else {
           btn.textContent = "⚠ Login Needed";
-          btn.title = res?.error || "Please log in to JobPilot";
+          btn.title = res?.error || "Please log in at localhost:3000";
           setTimeout(() => {
             btn.disabled = false;
             btn.textContent = "📌 Clip";
@@ -357,26 +463,41 @@
       });
     });
 
-    // In-page 1-Click Auto-Fill button
-    document.getElementById("jp-autofill-btn")?.addEventListener("click", async () => {
+    // 1-Click Auto-Fill
+    document.getElementById("jp-autofill-btn")?.addEventListener("click", () => {
       const btn = document.getElementById("jp-autofill-btn");
       if (!btn) return;
       btn.textContent = "⏳ Filling...";
 
-      // Retrieve cached or latest user profile
       chrome.runtime.sendMessage({ action: "FETCH_LATEST_PROFILE" }, (res) => {
         const profile = res?.profile;
+        if (!profile) {
+          btn.textContent = "⚠ Login Needed";
+          setTimeout(() => { btn.textContent = "⚡ Auto-Fill"; }, 3000);
+          return;
+        }
+
         const count = autofillPage(profile);
-        btn.textContent = `✓ Filled ${count}`;
-        setTimeout(() => {
-          btn.textContent = "⚡ Auto-Fill";
-        }, 3000);
+        btn.textContent = count > 0 ? `✓ Filled ${count}` : "No Fields Found";
+        setTimeout(() => { btn.textContent = "⚡ Auto-Fill"; }, 3000);
       });
     });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 5. Message Listener from Extension Popup
+  // 7. Dynamic Observer for Single Page Applications (LinkedIn, Ashby, Workday)
+  // ─────────────────────────────────────────────────────────────────────────────
+  let debounceTimer = null;
+  const observer = new MutationObserver(() => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(injectFloatingPill, 600);
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+  setTimeout(injectFloatingPill, 800);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 8. Message Listener from Extension Popup
   // ─────────────────────────────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     if (req.action === "GET_JOB_DATA") {
@@ -388,11 +509,4 @@
     }
     return true;
   });
-
-  // Inject widget after initial DOM settle
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => setTimeout(injectFloatingPill, 1000));
-  } else {
-    setTimeout(injectFloatingPill, 1000);
-  }
 })();

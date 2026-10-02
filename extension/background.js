@@ -3,40 +3,52 @@
 const API_BASE = "http://localhost:8000/api/v1";
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("JobPilot Copilot extension v1.1.0 installed.");
+  console.log("[JobPilot Copilot] Extension installed/updated.");
   chrome.storage.local.set({
     jobpilot_api_url: API_BASE,
     jobpilot_active: true
   });
 });
 
-// Helper to retrieve token from cookies or storage
+// Helper to retrieve token from storage, cookies, or open tabs
 async function getAuthToken() {
-  // 1. Check local storage
+  // 1. Check local extension storage
   const stored = await chrome.storage.local.get(["jobpilot_token"]);
   if (stored.jobpilot_token) {
     return stored.jobpilot_token;
   }
 
-  // 2. Try reading access_token cookie from localhost:8000 / localhost:3000 / 127.0.0.1
-  const cookieUrls = [
-    "http://localhost:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:3000"
-  ];
-
-  for (const url of cookieUrls) {
-    try {
-      const cookie = await chrome.cookies.get({ url, name: "access_token" });
-      if (cookie && cookie.value) {
-        await chrome.storage.local.set({ jobpilot_token: cookie.value });
-        return cookie.value;
+  // 2. Read access_token cookie from any allowed host
+  try {
+    const cookies = await chrome.cookies.getAll({ name: "access_token" });
+    if (cookies && cookies.length > 0) {
+      const validCookie = cookies.find(c => c.value && c.value.length > 20);
+      if (validCookie) {
+        await chrome.storage.local.set({ jobpilot_token: validCookie.value });
+        return validCookie.value;
       }
-    } catch (e) {
-      // ignore
     }
+  } catch (e) {
+    console.warn("Could not query cookies:", e);
   }
+
+  // 3. Fallback: Query open JobPilot tabs on localhost:3000 to read localStorage token
+  try {
+    const tabs = await chrome.tabs.query({ url: ["http://localhost:3000/*", "http://127.0.0.1:3000/*"] });
+    for (const t of tabs) {
+      if (t.id) {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: t.id },
+          func: () => localStorage.getItem("jobpilot_token")
+        });
+        const token = results?.[0]?.result;
+        if (token && token.length > 20) {
+          await chrome.storage.local.set({ jobpilot_token: token });
+          return token;
+        }
+      }
+    }
+  } catch (e) {}
 
   return null;
 }
@@ -44,24 +56,29 @@ async function getAuthToken() {
 // Helper to fetch user profile
 async function fetchUserProfile(token) {
   if (!token) return null;
-  try {
-    const res = await fetch(`${API_BASE}/profile/primary`, {
-      headers: {
-        "Authorization": `Bearer ${token}`
+
+  const endpoints = [
+    `${API_BASE}/profile`,
+    `${API_BASE}/profile/primary`,
+    `${API_BASE}/profile/master`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const profile = await res.json();
+        await chrome.storage.local.set({ jobpilot_profile: profile });
+        return profile;
       }
-    });
-    if (res.ok) {
-      const profile = await res.json();
-      await chrome.storage.local.set({ jobpilot_profile: profile });
-      return profile;
-    }
-  } catch (err) {
-    console.error("Error fetching profile:", err);
+    } catch (err) {}
   }
   return null;
 }
 
-// Listen for messages from popup and content scripts
+// Message Listener
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   if (req.action === "GET_AUTH_STATUS") {
     (async () => {
@@ -77,6 +94,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
           if (authRes.ok) {
             user = await authRes.json();
             profile = await fetchUserProfile(token);
+          } else {
+            // Token might be expired, remove and retry cookie check
+            await chrome.storage.local.remove(["jobpilot_token"]);
           }
         } catch (e) {}
       }
@@ -88,7 +108,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         token
       });
     })();
-    return true; // async sendResponse
+    return true; // async
   }
 
   if (req.action === "CLIP_JOB_POSTING") {
@@ -114,7 +134,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         }
 
         const match = await res.json();
-        const score = Math.round((match.match_score || 0.85 * 100));
+        const score = Math.round(match.match_score || 85);
         sendResponse({ success: true, match, score });
       } catch (err) {
         sendResponse({ success: false, error: err.message || "Network error" });

@@ -40,7 +40,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 1. Check Authentication Status (Cookie / Storage / API)
+  // 1. Check Authentication Status (Storage / Cookie / API)
   // ─────────────────────────────────────────────────────────────────────────────
   async function checkAuthStatus() {
     chrome.runtime.sendMessage({ action: "GET_AUTH_STATUS" }, (res) => {
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       } else {
         statusBadge.className = "badge badge-disconnected";
         statusBadgeText.textContent = "Not Connected";
-        userName.innerHTML = '<a href="http://localhost:3000/login" target="_blank" style="color: #fbbf24; text-decoration: underline;">Log in at localhost:3000</a>';
+        userName.innerHTML = '<a href="http://localhost:3000/login" target="_blank" style="color: #fbbf24; text-decoration: underline; font-weight: 700;">Login to JobPilot →</a>';
       }
     });
   }
@@ -67,54 +67,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   await checkAuthStatus();
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 2. Query Active Tab & Ensure Content Script Injected
+  // 2. Query Active Tab & Request Job Details
   // ─────────────────────────────────────────────────────────────────────────────
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
 
-  // Function to safely request job details from tab
-  async function loadJobDetailsFromTab() {
-    try {
-      // First attempt: send message
-      let res;
-      try {
-        res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
-      } catch (err) {
-        // If content script wasn't injected yet, dynamically inject it now
-        if (chrome.scripting && tab.id) {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ["content.js"]
-          });
-          await chrome.scripting.insertCSS({
-            target: { tabId: tab.id },
-            files: ["content.css"]
-          });
-          // Retry message
-          res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
-        }
-      }
-
-      if (res && res.title) {
-        pageJobData = res;
-        detectedTitle.textContent = res.title;
-        detectedCompany.textContent = res.company || "Company";
-        detectedLocation.textContent = res.location || "Remote";
-        atsBadge.textContent = res.atsType || "Web";
-      } else {
-        fallbackTabInfo();
-      }
-    } catch (e) {
-      fallbackTabInfo();
-    }
-  }
-
-  function fallbackTabInfo() {
-    let cleanTitle = tab.title || "Job Posting";
+  function fallbackTabInfo(customTitle = null) {
+    let cleanTitle = customTitle || tab.title || "Job Posting";
     let companyName = "Career Portal";
     try {
-      const urlObj = new URL(tab.url);
-      companyName = urlObj.hostname.replace("www.", "");
+      if (tab.url) {
+        const urlObj = new URL(tab.url);
+        companyName = urlObj.hostname.replace(/^(www\.|jobs\.|careers\.)/, "").split(".")[0];
+        companyName = companyName.charAt(0).toUpperCase() + companyName.slice(1);
+      }
     } catch {}
 
     pageJobData = {
@@ -122,8 +88,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       company: companyName,
       location: "Remote",
       atsType: "web",
-      jdText: tab.title + " " + tab.url,
-      url: tab.url,
+      jdText: (tab.title || "") + " " + (tab.url || ""),
+      url: tab.url || "",
     };
 
     detectedTitle.textContent = cleanTitle;
@@ -132,7 +98,44 @@ document.addEventListener("DOMContentLoaded", async () => {
     atsBadge.textContent = "Web";
   }
 
-  await loadJobDetailsFromTab();
+  // Handle restricted browser pages
+  if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("about:")) {
+    fallbackTabInfo("Open any job posting in your browser.");
+    return;
+  }
+
+  // Request extracted job data from content script
+  try {
+    let res;
+    try {
+      res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
+    } catch (err) {
+      // If content script was not injected, inject now
+      if (chrome.scripting && tab.id) {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content.js"]
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ["content.css"]
+        });
+        res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
+      }
+    }
+
+    if (res && res.title) {
+      pageJobData = res;
+      detectedTitle.textContent = res.title;
+      detectedCompany.textContent = res.company || "Company";
+      detectedLocation.textContent = res.location || "Remote";
+      atsBadge.textContent = res.atsType || "Web";
+    } else {
+      fallbackTabInfo();
+    }
+  } catch (e) {
+    fallbackTabInfo();
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 3. Clip & Score Job Handler
@@ -145,22 +148,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const payload = {
       company_name: pageJobData?.company || "Company",
-      title: pageJobData?.title || tab.title || "Software Engineer",
+      title: pageJobData?.title || tab.title || "Job Posting",
       location: pageJobData?.location || "Remote",
       workplace_type: "Remote",
       job_type: "Full-time",
       jd_text: pageJobData?.jdText || (tab.title + " " + tab.url),
-      apply_url: tab.url,
+      apply_url: tab.url || "",
     };
 
     chrome.runtime.sendMessage({ action: "CLIP_JOB_POSTING", payload, token: currentToken }, (res) => {
       if (res && res.success) {
         const score = res.score || 85;
-        showStatus(`✓ Clipped & scored: <b>${score}% Fit</b>! Added to your Pipeline.`, true);
+        showStatus(`✓ Clipped & scored: <b>${score}% Fit</b>! <a href="http://localhost:3000/pipeline" target="_blank" style="color:#6ee7b7; text-decoration:underline; font-weight:700;">Open Pipeline →</a>`, true);
         clipBtn.innerHTML = "<span>✅ Clipped to JobPilot!</span>";
         clipBtn.style.background = "#10b981";
       } else {
-        const errMsg = res?.error || "Could not clip job. Make sure backend is running and you are logged in.";
+        const errMsg = res?.error || "Could not clip job. Please make sure backend is running and you are logged in at localhost:3000.";
         showStatus(`Error: ${errMsg}`, false);
         clipBtn.disabled = false;
         clipBtn.innerHTML = "<span>📌 1-Click Clip & Score Job</span>";
@@ -184,7 +187,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentProfile = profRes?.profile;
       }
 
-      // Send autofill command to content script in current tab
+      if (!currentProfile) {
+        showStatus(`Please <a href="http://localhost:3000/login" target="_blank" style="color:#fda4af; text-decoration:underline; font-weight:700;">log in to JobPilot</a> first so your Master Profile can be used for autofill.`, false);
+        autofillBtn.disabled = false;
+        autofillBtn.innerHTML = "<span>⚡ Auto-Fill Application Form</span>";
+        return;
+      }
+
+      // Send autofill command to tab
       let result;
       try {
         result = await chrome.tabs.sendMessage(tab.id, {
@@ -192,7 +202,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           profile: currentProfile
         });
       } catch (err) {
-        // If content script was missing, inject and retry
+        // Retry with injection
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
         result = await chrome.tabs.sendMessage(tab.id, {
           action: "AUTOFILL_APPLICATION",
@@ -205,7 +215,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         showStatus(`✓ Autofill complete: filled <b>${count} fields</b> with your Master Profile!`, true);
         autofillBtn.innerHTML = `<span>✅ Filled ${count} Fields!</span>`;
       } else {
-        showStatus(`Autofill scanned page: no matching empty application fields found on this step.`, true);
+        showStatus(`Autofill scanned page: no matching empty application fields found on this form step.`, true);
         autofillBtn.innerHTML = `<span>⚡ Auto-Fill Application Form</span>`;
         autofillBtn.disabled = false;
       }
