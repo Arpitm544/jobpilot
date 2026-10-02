@@ -60,6 +60,10 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.post('/auth/login', { email, password });
       setUser(res.data.user);
+
+      if (res.data.tokens?.access_token && typeof window !== 'undefined') {
+        localStorage.setItem('jobpilot_token', res.data.tokens.access_token);
+      }
       
       // Notify other tabs of login
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -79,6 +83,10 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.post('/auth/register', { email, password, full_name });
       setUser(res.data.user);
+
+      if (res.data.tokens?.access_token && typeof window !== 'undefined') {
+        localStorage.setItem('jobpilot_token', res.data.tokens.access_token);
+      }
       
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         const channel = new BroadcastChannel('jobpilot_auth_channel');
@@ -94,6 +102,9 @@ export function AuthProvider({ children }) {
   // Logout handler: calls backend POST /auth/logout, invalidates cookie, syncs tabs, redirects to /
   const logout = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('jobpilot_token');
+      }
       await api.post('/auth/logout');
     } catch (e) {
       console.warn('Logout API error:', e);

@@ -140,6 +140,55 @@ _TECH_ROLE_EXCEPTIONS_RE = _re.compile(
 )
 
 
+def detect_job_experience_level(title: str, jd_text: str = "", employment_type: str = "") -> str:
+    """
+    Detects job experience/seniority level:
+    - 'fresher': Internships, freshers, trainees, apprentices, entry-level, 0-1 years
+    - 'junior': Junior, associate, SDE I, 1-3 years
+    - 'mid': Mid-level, software engineer, developer, 3-5 years
+    - 'senior': Senior, Sr., 5+ years
+    - 'lead': Lead, Staff, Principal, Architect, Director, 8+ years
+    """
+    t = (title or "").lower()
+    jd = (jd_text or "").lower()
+    emp = (employment_type or "").lower()
+
+    if emp in ("internship", "trainee", "apprenticeship") or "intern" in t or "trainee" in t or "apprentice" in t or "co-op" in t:
+        return "fresher"
+
+    if any(k in t for k in ["lead", "staff", "principal", "director", "head of", "architect", "vp", "chief"]):
+        return "lead"
+
+    if any(k in t for k in ["senior", "sr.", "sr ", "sr-"]):
+        return "senior"
+
+    if any(k in t for k in ["junior", "jr.", "jr ", "jr-", "associate", "entry", "fresher", "graduate"]):
+        return "fresher" if any(k in t for k in ["fresher", "graduate"]) else "junior"
+
+    # Check JD for years of experience
+    yoe_match = _re.search(r'(\d+)\s*(?:-|to|\+)\s*(\d+)?\s*(?:years|yrs|year)', jd[:2500])
+    if yoe_match:
+        try:
+            min_y = int(yoe_match.group(1))
+            if min_y >= 8:
+                return "lead"
+            elif min_y >= 5:
+                return "senior"
+            elif min_y >= 3:
+                return "mid"
+            elif min_y >= 1:
+                return "junior"
+            else:
+                return "fresher"
+        except (ValueError, TypeError):
+            pass
+
+    if any(w in jd[:1500] for w in ["0-1 year", "freshers", "fresher", "entry level", "entry-level", "recent graduate", "new graduate", "college graduate"]):
+        return "fresher"
+
+    return "mid"
+
+
 def is_remote_eligible_for_country(job, user_country: str) -> bool:
     """
     Pre-screens whether a job is eligible/authorized for a candidate from a given country (e.g. India).
@@ -351,6 +400,7 @@ async def list_jobs(
     city: Optional[str] = Query(None),
     work_mode: Optional[str] = Query(None, description="onsite, hybrid, remote, any"),
     employment_type: Optional[str] = Query(None, description="internship, full_time, trainee, etc."),
+    experience_level: Optional[str] = Query(None, description="all, fresher, junior, mid, senior, lead"),
     include_fresher: bool = Query(False, description="Include fresher/graduate entry-level full-time roles in internship mode"),
     include_maybe: bool = Query(False, description="Include borderline/maybe internships in results"),
     stipend_min: Optional[float] = Query(None, description="Minimum salary/stipend amount"),
@@ -616,9 +666,10 @@ async def list_jobs(
             reverse=True
         )
 
-    # Attach dynamic eligibility verdict and active hiring freshness metadata
+    # Attach dynamic eligibility verdict, experience level, and active hiring freshness metadata
     for rj in ranked_jobs:
         rj.eligibility_verdict = eligibility_map.get(str(rj.id))
+        rj.experience_level = detect_job_experience_level(rj.title, rj.jd_text, rj.employment_type)
         ref_date = rj.posted_date or rj.discovered_at
         if ref_date:
             days = max(0, (now_utc - ref_date).days)
@@ -627,6 +678,10 @@ async def list_jobs(
         else:
             rj.days_since_posted = 1
             rj.is_actively_hiring = True
+
+    if experience_level and experience_level.strip().lower() not in ("all", "any"):
+        exp_target = experience_level.strip().lower()
+        ranked_jobs = [j for j in ranked_jobs if j.experience_level == exp_target]
 
     real_offset = offset if isinstance(offset, int) else 0
     real_limit = limit if isinstance(limit, int) else 50
@@ -657,6 +712,10 @@ async def list_job_matches(
     result = await db.execute(query)
     matches = result.scalars().all()
 
+    for m in matches:
+        if m.job:
+            m.job.experience_level = detect_job_experience_level(m.job.title, m.job.jd_text, m.job.employment_type)
+
     if search:
         s_lower = search.lower()
         matches = [
@@ -678,6 +737,7 @@ async def get_job_details(
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    job.experience_level = detect_job_experience_level(job.title, job.jd_text, job.employment_type)
     return job
 
 
@@ -733,14 +793,28 @@ async def manually_add_job(
         db.add(prefs)
         await db.commit()
 
-    if not is_direct_job_url(body.apply_url):
+    if not body.apply_url or not isinstance(body.apply_url, str) or not body.apply_url.strip().startswith("http"):
         raise HTTPException(
             status_code=400,
-            detail="Please provide a direct URL to the specific job posting or application form, rather than a generic corporate careers homepage."
+            detail="Please provide a valid application URL for the job posting."
         )
 
+    # Detect ATS platform from URL
+    u_low = body.apply_url.strip().lower()
+    ats = "careers"
+    if "greenhouse.io" in u_low:
+        ats = "greenhouse"
+    elif "lever.co" in u_low:
+        ats = "lever"
+    elif "ashbyhq.com" in u_low:
+        ats = "ashby"
+    elif "linkedin.com" in u_low:
+        ats = "linkedin"
+    elif "workable.com" in u_low:
+        ats = "workable"
+
     dedupe_hash = compute_dedupe_hash(body.company_name, body.title, body.location)
-    source = await discovery_service.get_or_create_source(db, "manual", source_type="manual")
+    source = await discovery_service.get_or_create_source(db, ats, source_type="extension")
 
     existing_job_res = await db.execute(select(Job).where(Job.dedupe_hash == dedupe_hash))
     job = existing_job_res.scalar_one_or_none()
@@ -749,15 +823,15 @@ async def manually_add_job(
         job = Job(
             id=uuid.uuid4(),
             source_id=source.id,
-            company_name=body.company_name,
-            title=body.title,
-            location=body.location,
-            workplace_type=body.workplace_type,
-            job_type=body.job_type,
+            company_name=body.company_name.strip(),
+            title=body.title.strip(),
+            location=body.location.strip() if body.location else "Remote",
+            workplace_type=body.workplace_type or "Remote",
+            job_type=body.job_type or "Full-time",
             salary_range=body.salary_range,
-            jd_text=body.jd_text,
-            apply_url=body.apply_url,
-            ats_type="manual",
+            jd_text=body.jd_text or body.title,
+            apply_url=body.apply_url.strip(),
+            ats_type=ats,
             dedupe_hash=dedupe_hash,
             is_active=True,
         )
@@ -765,7 +839,7 @@ async def manually_add_job(
         await db.commit()
         await db.refresh(job)
 
-    # Score job
+    # Score job against user profile
     match = await scoring_service.calculate_match(
         db=db,
         user_id=current_user.id,
@@ -773,6 +847,13 @@ async def manually_add_job(
         profile=profile,
         preferences=prefs
     )
+    # Automatically queue clipped job for auto-application
+    if match.status == "discovered":
+        match.status = "queued"
+        await db.commit()
+        await db.refresh(match)
+
+    job.experience_level = detect_job_experience_level(job.title, job.jd_text, job.job_type)
     match.job = job
     return match
 

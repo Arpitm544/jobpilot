@@ -13,7 +13,7 @@
     }
     body {
       width: 360px;
-      background: #080c14;
+      background: #090d16;
       color: #e2e8f0;
       padding: 16px;
       font-size: 13px;
@@ -23,56 +23,90 @@
       align-items: center;
       justify-content: space-between;
       padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       margin-bottom: 14px;
     }
     .logo {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-weight: 700;
+      gap: 7px;
+      font-weight: 800;
       font-size: 15px;
       color: #ffffff;
+      letter-spacing: -0.3px;
     }
-    .logo span {
+    .logo-gradient {
       background: linear-gradient(135deg, #6366f1, #06b6d4);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
     .badge {
       font-size: 10px;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .badge-connected {
       background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border: 1px solid rgba(16, 185, 129, 0.35);
       color: #34d399;
     }
+    .badge-disconnected {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+    }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
     .card {
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.75);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 12px;
       padding: 12px;
       margin-bottom: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
     }
     .label {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.6px;
       color: #94a3b8;
+      font-weight: 700;
       margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
     .detected-info {
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       color: #ffffff;
-      white-space: nowrap;
+      line-height: 1.3;
+      margin-bottom: 2px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
     }
     .detected-sub {
       font-size: 11px;
       color: #38bdf8;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .detected-loc {
+      font-size: 11px;
+      color: #94a3b8;
       margin-top: 2px;
     }
     .btn {
@@ -80,32 +114,34 @@
       padding: 10px 14px;
       border-radius: 10px;
       border: none;
-      font-weight: 600;
-      font-size: 13px;
+      font-weight: 700;
+      font-size: 12px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       margin-bottom: 8px;
     }
     .btn-primary {
       background: linear-gradient(135deg, #4f46e5, #06b6d4);
       color: #ffffff;
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
     }
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       opacity: 0.95;
       transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
     }
     .btn-secondary {
       background: rgba(255, 255, 255, 0.06);
-      color: #cbd5e1;
+      color: #e2e8f0;
       border: 1px solid rgba(255, 255, 255, 0.12);
     }
-    .btn-secondary:hover {
+    .btn-secondary:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
       color: #ffffff;
     }
     .btn:disabled {
@@ -114,23 +150,66 @@
       transform: none;
     }
     .status-msg {
-      padding: 8px;
+      padding: 9px 12px;
       border-radius: 8px;
       font-size: 11px;
-      margin-top: 8px;
+      margin-top: 4px;
+      margin-bottom: 8px;
       display: none;
+      line-height: 1.4;
     }
     .status-success {
       background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border: 1px solid rgba(16, 185, 129, 0.35);
       color: #6ee7b7;
       display: block;
     }
     .status-error {
       background: rgba(244, 63, 94, 0.15);
-      border: 1px solid rgba(244, 63, 94, 0.3);
+      border: 1px solid rgba(244, 63, 94, 0.35);
       color: #fda4af;
       display: block;
+    }
+    .user-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .user-info {
+      color: #cbd5e1;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .token-toggle {
+      font-size: 10px;
+      color: #818cf8;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .token-section {
+      display: none;
+      margin-top: 8px;
+    }
+    input[type="text"] {
+      width: 100%;
+      background: #0b111e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #fff;
+      margin-top: 4px;
+      outline: none;
     }
     .footer {
       display: flex;
@@ -144,55 +223,73 @@
     .footer a {
       color: #818cf8;
       text-decoration: none;
+      font-weight: 600;
     }
     .footer a:hover {
       text-decoration: underline;
-    }
-    input[type="text"] {
-      width: 100%;
-      background: #0b111e;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 6px 10px;
-      font-size: 12px;
-      color: #fff;
-      margin-top: 4px;
-      outline: none;
+      color: #a5b4fc;
     }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <div class="header">
     <div class="logo">
-      <span>JobPilot</span> Copilot
+      <span class="logo-gradient">JobPilot</span> Copilot
     </div>
-    <div class="badge" id="statusBadge">Connected</div>
+    <div class="badge badge-connected" id="statusBadge">
+      <span class="badge-dot"></span>
+      <span id="statusBadgeText">Connected</span>
+    </div>
   </div>
 
+  <!-- User Account Strip -->
+  <div class="user-strip" id="userStrip">
+    <div class="user-info" id="userInfo">
+      <span>👤</span>
+      <span id="userName">Checking session...</span>
+    </div>
+    <button type="button" class="token-toggle" id="tokenToggleBtn">Manual Token</button>
+  </div>
+
+  <!-- Detected Job Card -->
   <div class="card">
-    <div class="label">Active Job Posting Detected</div>
-    <div class="detected-info" id="detectedTitle">Analyzing active page...</div>
-    <div class="detected-sub" id="detectedCompany">Checking ATS portal...</div>
+    <div class="label">
+      <span>Active Job Detected</span>
+      <span id="atsBadge" style="color: #6366f1; text-transform: uppercase;"></span>
+    </div>
+    <div class="detected-info" id="detectedTitle">Scanning active page...</div>
+    <div class="detected-sub" id="detectedCompany">Checking job board portal...</div>
+    <div class="detected-loc" id="detectedLocation"></div>
   </div>
 
+  <!-- Primary Action: Clip & Score -->
   <button id="clipBtn" class="btn btn-primary">
     <span>📌 1-Click Clip & Score Job</span>
   </button>
 
+  <!-- Secondary Action: Autofill Form -->
   <button id="autofillBtn" class="btn btn-secondary">
     <span>⚡ Auto-Fill Application Form</span>
   </button>
 
+  <!-- Status / Alert Message Box -->
   <div id="statusBox" class="status-msg"></div>
 
-  <div class="card" style="margin-top: 10px;">
-    <div class="label">API Authorization Token (Bearer)</div>
-    <input type="text" id="tokenInput" placeholder="Auto-synced or paste token here">
+  <!-- Collapsible Token Section -->
+  <div class="token-section" id="tokenSection">
+    <div class="label">Custom API Bearer Token</div>
+    <input type="text" id="tokenInput" placeholder="Auto-synced from localhost:3000">
   </div>
 
+  <!-- Footer Links -->
   <div class="footer">
-    <span>v1.0.0 (Manifest V3)</span>
-    <a href="http://localhost:3000/dashboard" target="_blank">Open Web Dashboard ➔</a>
+    <span>v1.1.0 (MV3)</span>
+    <div style="display: flex; gap: 10px;">
+      <a href="http://localhost:3000/discovery" target="_blank">Discovery</a>
+      <span>•</span>
+      <a href="http://localhost:3000/pipeline" target="_blank">Pipeline ➔</a>
+    </div>
   </div>
 
   <script src="popup.js"></script>
