@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 const MAX_SIZE_MB = 5;
 const MAX_BYTES = MAX_SIZE_MB * 1024 * 1024;
@@ -36,7 +37,6 @@ function ClockIcon(props) {
 export default function ResumeUploader({
   onUploadSuccess,
   onSkipToManual,
-  sampleResumeText = '',
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -198,7 +198,7 @@ export default function ResumeUploader({
         }
       } catch (err) {
         // If 401 or network glitch, retry a few times
-        console.warn('Status poll warning:', err);
+        logger.warn('Status poll warning:', err);
       }
     };
 
@@ -206,13 +206,6 @@ export default function ResumeUploader({
     poll();
   };
 
-  const handleLoadSample = async () => {
-    if (!sampleResumeText) return;
-    const blob = new Blob([sampleResumeText], { type: 'text/plain' });
-    const sampleFile = new File([blob], 'alex_mercer_sample_resume.txt', { type: 'text/plain' });
-    setSelectedFile(sampleFile);
-    startUpload(sampleFile);
-  };
 
   const handleReset = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -321,16 +314,7 @@ export default function ResumeUploader({
 
             {/* Sample Resume and Manual Fallback */}
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800/80 text-xs">
-              {sampleResumeText && process.env.NODE_ENV === 'development' && (
-                <button
-                  type="button"
-                  onClick={handleLoadSample}
-                  className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Try with Sample Resume (Alex Mercer)
-                </button>
-              )}
+
 
               {onSkipToManual && (
                 <button

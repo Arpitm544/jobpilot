@@ -153,7 +153,13 @@ async def _handle_registration(
 
     return AuthResponse(
         user=UserResponse.model_validate(new_user),
-        message="Account created successfully"
+        message="Account created successfully",
+        tokens=TokenResponse(
+            access_token=token,
+            refresh_token=token,
+            token_type="bearer",
+            expires_in=7 * 24 * 60 * 60
+        )
     )
 
 
@@ -209,7 +215,13 @@ async def login(
 
     return AuthResponse(
         user=UserResponse.model_validate(user),
-        message="Logged in successfully"
+        message="Logged in successfully",
+        tokens=TokenResponse(
+            access_token=token,
+            refresh_token=token,
+            token_type="bearer",
+            expires_in=7 * 24 * 60 * 60
+        )
     )
 
 

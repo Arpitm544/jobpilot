@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // All API calls proxy through Next.js rewrites to keep cookies first-party
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

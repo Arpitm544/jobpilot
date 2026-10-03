@@ -16,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 export default function ProjectsSection({
   projects = [],
@@ -135,7 +136,7 @@ export default function ProjectsSection({
         }
       }
     } catch (e) {
-      console.warn('Failed to fetch github suggestions:', e);
+      logger.warn('Failed to fetch github suggestions:', e);
     } finally {
       setSuggestionsLoading(false);
     }

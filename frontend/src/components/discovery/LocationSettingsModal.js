@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 export default function LocationSettingsModal({ isOpen, onClose, onSaved }) {
   const [loading, setLoading] = useState(true);
@@ -60,7 +61,7 @@ export default function LocationSettingsModal({ isOpen, onClose, onSaved }) {
           });
         }
       } catch (err) {
-        console.error('Error loading location settings:', err);
+        logger.error('Error loading location settings:', err);
       } finally {
         setLoading(false);
       }

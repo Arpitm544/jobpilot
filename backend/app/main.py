@@ -1,10 +1,13 @@
 import logging
+import time
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
@@ -21,6 +24,7 @@ from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.ws import router as ws_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.countries import router as countries_router
+from app.api.v1.bootstrap import router as bootstrap_router
 
 # Configure file and stream logging
 LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
@@ -41,6 +45,28 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("jobpilot")
+
+
+# ── Per-endpoint latency tracking (in-memory, p50/p95 over last 1000 samples) ─
+_latency_log: dict = defaultdict(list)
+_LATENCY_WINDOW = 1000  # keep last N samples per route
+
+
+class TimingMiddleware(BaseHTTPMiddleware):
+    """Records per-endpoint latency. Access /perf for a p50/p95 summary."""
+    async def dispatch(self, request: Request, call_next):
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        key = f"{request.method} {request.url.path}"
+        bucket = _latency_log[key]
+        bucket.append(elapsed_ms)
+        if len(bucket) > _LATENCY_WINDOW:
+            _latency_log[key] = bucket[-_LATENCY_WINDOW:]
+        if elapsed_ms > 400:
+            logger.warning(f"SLOW {key} {elapsed_ms:.0f}ms")
+        response.headers["X-Response-Time"] = f"{elapsed_ms:.1f}ms"
+        return response
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -90,7 +116,14 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
+    default_response_class=ORJSONResponse,  # Faster JSON serialization
 )
+
+# GZip compression for all text responses >= 500 bytes
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# Timing middleware — measures per-endpoint latency
+app.add_middleware(TimingMiddleware)
 
 # Request ID Middleware
 app.add_middleware(RequestIDMiddleware)
@@ -103,7 +136,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"]
+    expose_headers=["X-Request-ID", "X-Response-Time"]
 )
 
 
@@ -138,6 +171,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API v1 Routers
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(bootstrap_router, prefix=settings.API_V1_STR)
 app.include_router(profile_router, prefix=settings.API_V1_STR)
 app.include_router(preferences_router, prefix=settings.API_V1_STR)
 app.include_router(jobs_router, prefix=settings.API_V1_STR)
@@ -163,6 +197,28 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
         "database": "connected"
     }
+
+
+@app.get("/perf", tags=["Observability"])
+async def perf_summary():
+    """Returns p50/p95 latency (ms) per endpoint over the last 1000 requests each."""
+    import statistics
+    result = {}
+    for route, samples in _latency_log.items():
+        if not samples:
+            continue
+        sorted_s = sorted(samples)
+        n = len(sorted_s)
+        p50 = sorted_s[int(n * 0.50)]
+        p95 = sorted_s[min(int(n * 0.95), n - 1)]
+        result[route] = {
+            "count": n,
+            "p50_ms": round(p50, 1),
+            "p95_ms": round(p95, 1),
+            "max_ms": round(sorted_s[-1], 1),
+        }
+    # Sort by p95 descending so slowest routes appear first
+    return dict(sorted(result.items(), key=lambda x: x[1]["p95_ms"], reverse=True))
 
 
 @app.get("/", tags=["Root"])

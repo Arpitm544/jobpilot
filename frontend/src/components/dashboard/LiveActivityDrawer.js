@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { 
   X, 
   Terminal, 
@@ -87,7 +87,7 @@ export default function LiveActivityDrawer({
       {isOpen && (
         <>
           {/* Backdrop Blur Overlay */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -98,7 +98,7 @@ export default function LiveActivityDrawer({
           />
 
           {/* Sliding Drawer Container */}
-          <motion.div
+          <m.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -157,7 +157,7 @@ export default function LiveActivityDrawer({
                 events.map((evt, idx) => {
                   const badge = getEventBadge(evt.type);
                   return (
-                    <motion.div
+                    <m.div
                       key={evt.id || idx}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -210,7 +210,7 @@ export default function LiveActivityDrawer({
                           )}
                         </div>
                       )}
-                    </motion.div>
+                    </m.div>
                   );
                 })
               )}
@@ -221,7 +221,7 @@ export default function LiveActivityDrawer({
               <span>Channel: /api/v1/events/ws</span>
               <span>Auto-scroll: On</span>
             </div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

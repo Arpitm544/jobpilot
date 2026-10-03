@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { api } from '@/lib/api';
+import { api, API_BASE_URL } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import {
   X,
   Camera,
@@ -81,11 +82,11 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
       if (onStatusUpdate) onStatusUpdate('rejected');
       onClose();
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 
-  const screenshotUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/apply/${appId}/screenshot?t=${Date.now()}`;
+  const screenshotUrl = `${API_BASE_URL}/apply/${appId}/screenshot?t=${Date.now()}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md">
@@ -228,7 +229,7 @@ export default function ReviewModal({ isOpen, onClose, application, onStatusUpda
               </div>
 
               <a
-                href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/tailor/${app.tailored_resume_id}/pdf`}
+                href={`${API_BASE_URL}/tailor/${app.tailored_resume_id}/pdf`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-all"

@@ -45,7 +45,7 @@ export default function ContactSection({
             <input
               id="contact-full-name"
               type="text"
-              placeholder="e.g. Alex Mercer"
+              placeholder="e.g. John Doe"
               value={contactInfo.full_name || ''}
               onChange={(e) => updateField('full_name', e.target.value)}
               className="w-full h-10 px-3.5 rounded-xl bg-slate-900/90 border border-white/10 text-white text-[14px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all placeholder:text-slate-500"

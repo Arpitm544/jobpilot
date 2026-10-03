@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
+import { logger } from '@/lib/logger';
 
 import ContactSection from './ContactSection';
 import SummarySection from './SummarySection';
@@ -123,7 +124,7 @@ export default function ProfileEditor({
         }
       }
     } catch (err) {
-      console.error('Failed to load profile:', err);
+      logger.error('Failed to load profile:', err);
       setLoadError(err.response?.data?.detail || 'Unable to connect to the backend server to load your Master Profile.');
     } finally {
       setLoading(false);
@@ -298,7 +299,7 @@ export default function ProfileEditor({
         }
       }
     } catch (err) {
-      console.error('Save failed:', err);
+      logger.error('Save failed:', err);
       // Rollback to previous snapshot if necessary
       setSaveErrorMsg(err.response?.data?.detail || 'Failed to save changes. Your draft is preserved locally.');
     } finally {
