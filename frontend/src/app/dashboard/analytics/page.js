@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/authContext';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import { useSocket } from '@/hooks/useSocket';
 import {
   TrendingUp,
@@ -40,14 +41,7 @@ export default function AnalyticsDashboardPage() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [applications, setApplications] = useState([]);
 
-  // Email sync simulation state
-  const [simSender, setSimSender] = useState('recruiting@stripe.com');
-  const [simSubject, setSimSubject] = useState('Invitation to Interview: Senior Backend Engineer at Stripe');
-  const [simBody, setSimBody] = useState(
-    'Hi Candidate,\n\nWe were impressed by your background and tailored resume. We would like to invite you to an initial technical screen with our hiring manager.\n\nPlease choose a slot on our scheduling calendar: https://cal.stripe.com/eng-team\n\nBest,\nStripe Recruiting Team'
-  );
-  const [syncingEmail, setSyncingEmail] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
+
 
   // Follow-up email generator state
   const [selectedAppId, setSelectedAppId] = useState('');
@@ -75,7 +69,7 @@ export default function AnalyticsDashboardPage() {
       const res = await api.get('/analytics/overview');
       setAnalytics(res.data);
     } catch (err) {
-      console.error('Failed to load analytics overview:', err);
+      logger.error('Failed to load analytics overview:', err);
     }
   };
 
@@ -84,7 +78,7 @@ export default function AnalyticsDashboardPage() {
       const res = await api.get('/analytics/audit-log?limit=15');
       setAuditLogs(res.data);
     } catch (err) {
-      console.error('Failed to load audit logs:', err);
+      logger.error('Failed to load audit logs:', err);
     }
   };
 
@@ -102,7 +96,7 @@ export default function AnalyticsDashboardPage() {
         setSelectedAppId(allApps[0].id);
       }
     } catch (err) {
-      console.error('Failed to load applications for follow-up:', err);
+      logger.error('Failed to load applications for follow-up:', err);
     }
   };
 
@@ -117,53 +111,7 @@ export default function AnalyticsDashboardPage() {
     reloadAll();
   }, []);
 
-  // Handle email simulation
-  const handleSimulateEmail = async (presetType) => {
-    let sender = simSender;
-    let subject = simSubject;
-    let body = simBody;
 
-    if (presetType === 'interview') {
-      sender = 'talent@stripe.com';
-      subject = 'Invitation to Interview: Senior Backend Engineer at Stripe';
-      body = 'Hi, we loved your application and would like to schedule a technical screen with our hiring team!';
-    } else if (presetType === 'offer') {
-      sender = 'hr-offers@datadog.com';
-      subject = 'Formal Offer of Employment: Senior Full-Stack Engineer at Datadog';
-      body = 'Congratulations! We are pleased to offer you employment at Datadog. Please review the attached formal offer letter.';
-    } else if (presetType === 'rejection') {
-      sender = 'no-reply@meta.com';
-      subject = 'Update on your application for Software Engineer';
-      body = 'Thank you for your interest. After review, we have decided to pursue other applicants whose experience aligns closer with our needs.';
-    } else if (presetType === 'receipt') {
-      sender = 'careers@airbnb.com';
-      subject = 'Application Received - Software Engineer at Airbnb';
-      body = 'Thank you for applying. We have received your tailored resume and our team is currently reviewing your application.';
-    }
-
-    setSimSender(sender);
-    setSimSubject(subject);
-    setSimBody(body);
-    setSyncingEmail(true);
-    setSyncResult(null);
-
-    try {
-      const res = await api.post('/analytics/email-sync', {
-        sender,
-        subject,
-        body
-      });
-      setSyncResult(res.data);
-      setToastMessage(res.data.classification?.summary || 'Email processed successfully!');
-      setTimeout(() => setToastMessage(null), 5000);
-      await fetchAnalyticsData();
-      await fetchAuditLogs();
-    } catch (err) {
-      console.error('Email sync error:', err);
-    } finally {
-      setSyncingEmail(false);
-    }
-  };
 
   // Generate Follow-up Draft
   const handleGenerateFollowUp = async () => {
@@ -178,7 +126,7 @@ export default function AnalyticsDashboardPage() {
       });
       setFollowUpDraft(res.data);
     } catch (err) {
-      console.error('Failed to generate follow-up:', err);
+      logger.error('Failed to generate follow-up:', err);
     } finally {
       setGeneratingDraft(false);
     }
@@ -445,138 +393,7 @@ export default function AnalyticsDashboardPage() {
         </div>
 
         {/* Section: Email Synchronization & Inbound Tracking */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Email Sync Interactive Simulator */}
-          <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 shadow-xl backdrop-blur-xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-indigo-400" />
-                  Recruiter Inbound Email Tracker
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Simulate or hook inbound recruiter emails. JobPilot extracts intent and transitions status in real-time.
-                </p>
-              </div>
-              <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
-                <Inbox className="w-5 h-5" />
-              </span>
-            </div>
-
-            {/* Quick Preset Buttons */}
-            <div>
-              <span className="text-xs text-slate-400 font-medium block mb-2">Simulate Quick Inbound Scenarios:</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateEmail('interview')}
-                  className="px-2.5 py-1.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-300 hover:bg-violet-500/20 text-xs font-medium transition-all"
-                >
-                  📅 Interview Invite
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateEmail('offer')}
-                  className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 text-xs font-medium transition-all"
-                >
-                  🎉 Job Offer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateEmail('rejection')}
-                  className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 text-xs font-medium transition-all"
-                >
-                  ❌ Rejection
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateEmail('receipt')}
-                  className="px-2.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 text-xs font-medium transition-all"
-                >
-                  📨 Receipt Ack
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Input Form */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Recruiter / Sender Email</label>
-                <input
-                  type="text"
-                  value={simSender}
-                  onChange={(e) => setSimSender(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                  placeholder="recruiting@company.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Email Subject Line</label>
-                <input
-                  type="text"
-                  value={simSubject}
-                  onChange={(e) => setSimSubject(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                  placeholder="Update regarding your application"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Email Body Content</label>
-                <textarea
-                  rows={3}
-                  value={simBody}
-                  onChange={(e) => setSimBody(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
-                  placeholder="Paste recruiter message here..."
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleSimulateEmail('custom')}
-                disabled={syncingEmail}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-medium text-sm shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 active:scale-98"
-              >
-                {syncingEmail ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Analyzing Inbound Email...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    <span>Process & Sync Email</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Sync Result Feedback */}
-            {syncResult && (
-              <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-500/30 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    Classification: {syncResult.classification?.category}
-                  </span>
-                  <span className="text-slate-400 font-mono">
-                    Confidence: {Math.round((syncResult.classification?.confidence || 0.9) * 100)}%
-                  </span>
-                </div>
-                <p className="text-slate-300">{syncResult.classification?.summary}</p>
-                {syncResult.matched && (
-                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 flex items-center justify-between">
-                    <span>Target: {syncResult.company}</span>
-                    <span className="font-mono uppercase font-bold text-[10px]">
-                      {syncResult.old_status} ➔ {syncResult.new_status}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        <div className="grid grid-cols-1 gap-6">
 
           {/* AI Follow-Up Assistant */}
           <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 shadow-xl backdrop-blur-xl space-y-5 flex flex-col justify-between">

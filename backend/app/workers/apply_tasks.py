@@ -182,7 +182,7 @@ async def async_apply_job(
         )
 
         # 8. Check User's Apply Mode: Auto-submit vs Review
-        if prefs.apply_mode == "auto_apply" and not is_dry_run:
+        if not is_dry_run or prefs.apply_mode in ["auto_apply", "auto_with_cap", "full_auto"]:
             application = await apply_service.approve_and_submit(
                 db=db,
                 user_id=user_id,

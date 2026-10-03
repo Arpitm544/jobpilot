@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 
 export function useSocket(onEventReceived) {
   const [connected, setConnected] = useState(false);
@@ -98,7 +99,7 @@ export function useSocket(onEventReceived) {
             handleMessage(data);
           }
         } catch (err) {
-          console.error('Error parsing WS message:', err);
+          logger.error('Error parsing WS message:', err);
         }
       };
 
@@ -140,7 +141,7 @@ export function useSocket(onEventReceived) {
             const data = JSON.parse(e.data);
             handleMessage(data);
           } catch (err) {
-            console.error('Error parsing SSE message:', err);
+            logger.error('Error parsing SSE message:', err);
           }
         };
         sse.onerror = () => {
@@ -156,7 +157,7 @@ export function useSocket(onEventReceived) {
           reconnectTimeoutRef.current = setTimeout(connect, delay);
         };
       } catch (sseErr) {
-        console.warn('Neither WS nor SSE could be initialized:', sseErr);
+        logger.warn('Neither WS nor SSE could be initialized:', sseErr);
       }
     }
   }, [handleMessage]);

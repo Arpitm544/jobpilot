@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { X } from 'lucide-react';
 
 export default function Chip({
@@ -15,7 +15,7 @@ export default function Chip({
   const isClickable = Boolean(onSelect);
 
   return (
-    <motion.span
+    <m.span
       whileHover={isClickable ? { scale: 1.03 } : undefined}
       whileTap={isClickable ? { scale: 0.97 } : undefined}
       onClick={onSelect}
@@ -40,6 +40,6 @@ export default function Chip({
           <X className="w-3 h-3" />
         </button>
       )}
-    </motion.span>
+    </m.span>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
 const variants = {
@@ -39,7 +39,7 @@ export default function Button({
   const isDisabled = disabled || isLoading;
 
   return (
-    <motion.button
+    <m.button
       type={type}
       whileHover={isDisabled ? undefined : { y: -1 }}
       whileTap={isDisabled ? undefined : { scale: 0.97 }}
@@ -60,6 +60,6 @@ export default function Button({
       <span>{children}</span>
 
       {!isLoading && rightIcon && <span className="shrink-0">{rightIcon}</span>}
-    </motion.button>
+    </m.button>
   );
 }

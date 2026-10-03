@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 export default function Card({
   children,
@@ -17,7 +17,7 @@ export default function Card({
 
   if (interactive) {
     return (
-      <motion.div
+      <m.div
         whileHover={{ y: -2, borderColor: 'rgba(99, 102, 241, 0.4)' }}
         whileTap={{ scale: 0.99 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
@@ -26,7 +26,7 @@ export default function Card({
         {...props}
       >
         {children}
-      </motion.div>
+      </m.div>
     );
   }
 

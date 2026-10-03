@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from './api';
+import { logger } from './logger';
 
 const AuthContext = createContext(null);
 
@@ -114,7 +115,7 @@ export function AuthProvider({ children }) {
       }
       await api.post('/auth/logout');
     } catch (e) {
-      console.warn('Logout API error:', e);
+      logger.warn('Logout API error:', e);
     } finally {
       setUser(null);
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {

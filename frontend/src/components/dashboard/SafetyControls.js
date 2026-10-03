@@ -13,6 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 export default function SafetyControls({ 
   safetyStatus, 
@@ -32,7 +33,7 @@ export default function SafetyControls({
         onStatusUpdated(res.data.kill_switch_active);
       }
     } catch (err) {
-      console.error('Failed to toggle kill switch:', err);
+      logger.error('Failed to toggle kill switch:', err);
     } finally {
       setLoading(false);
     }

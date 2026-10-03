@@ -140,7 +140,7 @@ export default function JobsPage() {
     setError('');
     try {
       const ids = list.map(m => m.id).filter(Boolean);
-      if (ids.length) await api.post('/apply/queue-auto', { match_ids: ids, is_dry_run: true });
+      if (ids.length) await api.post('/apply/queue-auto', { match_ids: ids, is_dry_run: false });
       setMsg(`Pushed ${list.length} jobs to your pipeline!`);
       setTimeout(() => setMsg(''), 6000);
     } catch (err) {

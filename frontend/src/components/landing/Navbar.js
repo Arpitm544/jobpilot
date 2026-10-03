@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/authContext';
 import { landingContent } from './content';
 import { Sparkles, Menu, X, ArrowRight, LayoutDashboard } from 'lucide-react';
@@ -201,7 +201,7 @@ export default function LandingNavbar() {
                 >
                   {/* Sliding layoutId animated active pill */}
                   {isActive && (
-                    <motion.span
+                    <m.span
                       layoutId="activeNavPill"
                       className="absolute inset-0 rounded-lg bg-indigo-500/15 border border-indigo-500/30 -z-10 shadow-sm shadow-indigo-500/10"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
@@ -260,7 +260,7 @@ export default function LandingNavbar() {
       {/* Mobile Drawer Panel */}
       <AnimatePresence>
         {mobileMenuOpen && (
-          <motion.div
+          <m.div
             ref={mobileMenuRef}
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -321,7 +321,7 @@ export default function LandingNavbar() {
                 </>
               )}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </header>

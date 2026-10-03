@@ -1,9 +1,11 @@
 // JobPilot Background Service Worker (Manifest V3)
 
-const API_BASE = "http://localhost:8000/api/v1";
+const IS_PROD = false; // Toggle this for production build
+const API_BASE = IS_PROD ? "https://api.jobpilot.io/api/v1" : "http://localhost:8000/api/v1";
+const WEB_BASE = IS_PROD ? "https://app.jobpilot.io" : "http://localhost:3000";
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("[JobPilot Copilot] Extension installed/updated.");
+  // console.log("[JobPilot Copilot] Extension installed/updated.");
   chrome.storage.local.set({
     jobpilot_api_url: API_BASE,
     jobpilot_active: true
@@ -29,12 +31,12 @@ async function getAuthToken() {
       }
     }
   } catch (e) {
-    console.warn("Could not query cookies:", e);
+    // console.warn("Could not query cookies:", e);
   }
 
   // 3. Fallback: Query open JobPilot tabs on localhost:3000 to read localStorage token
   try {
-    const tabs = await chrome.tabs.query({ url: ["http://localhost:3000/*", "http://127.0.0.1:3000/*"] });
+    const tabs = await chrome.tabs.query({ url: [`${WEB_BASE}/*`, "http://127.0.0.1:3000/*"] });
     for (const t of tabs) {
       if (t.id) {
         const results = await chrome.scripting.executeScript({
@@ -88,12 +90,13 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 
       if (token) {
         try {
-          const authRes = await fetch(`${API_BASE}/auth/me`, {
+          const authRes = await fetch(`${API_BASE}/bootstrap`, {
             headers: { "Authorization": `Bearer ${token}` }
           });
           if (authRes.ok) {
-            user = await authRes.json();
-            profile = await fetchUserProfile(token);
+            const data = await authRes.json();
+            user = data.user;
+            profile = data.profile_summary;
           } else {
             // Token might be expired, remove and retry cookie check
             await chrome.storage.local.remove(["jobpilot_token"]);
@@ -116,7 +119,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
       try {
         const token = req.token || (await getAuthToken());
         if (!token) {
-          return sendResponse({ success: false, error: "Please log in to JobPilot at http://localhost:3000" });
+          return sendResponse({ success: false, error: `Please log in to JobPilot at ${WEB_BASE}` });
         }
 
         const res = await fetch(`${API_BASE}/jobs/manual`, {

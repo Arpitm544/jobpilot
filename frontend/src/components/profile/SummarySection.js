@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { FileText, Sparkles, Check, X, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 export default function SummarySection({
   summary = '',
@@ -28,7 +29,7 @@ export default function SummarySection({
         setSuggestion(res.data.polished);
       }
     } catch (err) {
-      console.warn('AI polish failed:', err);
+      logger.warn('AI polish failed:', err);
       setErrorMsg(err.response?.data?.detail || 'Could not polish summary. Please try again.');
     } finally {
       setPolishLoading(false);

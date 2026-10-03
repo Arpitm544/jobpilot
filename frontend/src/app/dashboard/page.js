@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/authContext';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import ReviewModal from '@/components/pipeline/ReviewModal';
 import TailorModal from '@/components/tailor/TailorModal';
 import SafetyControls from '@/components/dashboard/SafetyControls';
@@ -57,13 +58,13 @@ export default function DashboardPipelinePage() {
 
   const fetchPipeline = async () => {
     try { const res = await api.get('/apply/pipeline'); setPipeline(res.data); }
-    catch (err) { console.error('Failed to load pipeline:', err); }
+    catch (err) { logger.error('Failed to load pipeline:', err); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
   const fetchSafetyStatus = async () => {
     try { const res = await api.get('/apply/safety-status'); setSafetyStatus(res.data); }
-    catch (err) { console.error('Failed to load safety status:', err); }
+    catch (err) { logger.error('Failed to load safety status:', err); }
   };
 
   const handleRefresh = () => { setRefreshing(true); fetchPipeline(); fetchSafetyStatus(); };
@@ -94,7 +95,7 @@ export default function DashboardPipelinePage() {
       setEditingCap(false);
       setToastMessage(`Daily cap updated to ${capInput} applications/day`);
       setTimeout(() => setToastMessage(null), 3500);
-    } catch (err) { console.error('Failed to update cap:', err); }
+    } catch (err) { logger.error('Failed to update cap:', err); }
     finally { setSavingCap(false); }
   };
 

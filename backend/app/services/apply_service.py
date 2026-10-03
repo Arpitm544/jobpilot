@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import utc_now
+from app.models.user import utc_now, User
 from app.models.job import Job, JobMatch
 from app.models.profile import MasterProfile, QuestionBank
 from app.models.application import TailoredResume, Application, ApplicationEvent
@@ -234,6 +234,25 @@ class ApplyService:
         match = match_res.scalar_one_or_none()
         if match:
             match.status = "applied"
+            
+        # Send Email Notification
+        user_res = await db.execute(select(User).where(User.id == user_id))
+        user = user_res.scalar_one_or_none()
+        
+        job_res = await db.execute(select(Job).where(Job.id == application.job_id))
+        job = job_res.scalar_one_or_none()
+        
+        if user and job:
+            import asyncio
+            from app.services.email_service import email_service
+            asyncio.get_running_loop().run_in_executor(
+                None,
+                email_service.send_application_notification,
+                user.email,
+                job.title,
+                job.company_name,
+                str(application.id)
+            )
 
         await db.commit()
         await db.refresh(application)

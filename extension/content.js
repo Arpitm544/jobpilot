@@ -5,7 +5,7 @@
   if (window.__jobpilot_copilot_initialized) return;
   window.__jobpilot_copilot_initialized = true;
 
-  console.log("[JobPilot Copilot] Active on page:", window.location.href);
+  // console.log("[JobPilot Copilot] Active on page:", window.location.href);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1. Sync Token from JobPilot Web App (localhost:3000)
@@ -247,7 +247,7 @@
   // ─────────────────────────────────────────────────────────────────────────────
   function autofillPage(profile) {
     if (!profile) {
-      console.warn("[JobPilot Copilot] No user profile provided for autofill.");
+      // console.warn("[JobPilot Copilot] No user profile provided for autofill.");
       return 0;
     }
 
@@ -383,7 +383,7 @@
       }
     } catch (e) {}
 
-    console.log(`[JobPilot Copilot] Auto-filled ${filledCount} fields.`);
+    // console.log(`[JobPilot Copilot] Auto-filled ${filledCount} fields.`);
     return filledCount;
   }
 

@@ -1,6 +1,8 @@
 // JobPilot Copilot — Popup Script (Manifest V3)
 
-const API_BASE = "http://localhost:8000/api/v1";
+const IS_PROD = false; // Toggle this for production build
+const API_BASE = IS_PROD ? "https://api.jobpilot.io/api/v1" : "http://localhost:8000/api/v1";
+const WEB_BASE = IS_PROD ? "https://app.jobpilot.io" : "http://localhost:3000";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const statusBadge = document.getElementById("statusBadge");
@@ -59,7 +61,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       } else {
         statusBadge.className = "badge badge-disconnected";
         statusBadgeText.textContent = "Not Connected";
-        userName.innerHTML = '<a href="http://localhost:3000/login" target="_blank" style="color: #fbbf24; text-decoration: underline; font-weight: 700;">Login to JobPilot →</a>';
+        userName.innerHTML = `<a href="${WEB_BASE}/login" target="_blank" style="color: #fbbf24; text-decoration: underline; font-weight: 700;">Login to JobPilot →</a>`;
       }
     });
   }
@@ -70,14 +72,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 2. Query Active Tab & Request Job Details
   // ─────────────────────────────────────────────────────────────────────────────
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.id) return;
+  const currentTab = tab || { url: "", id: null };
 
   function fallbackTabInfo(customTitle = null) {
-    let cleanTitle = customTitle || tab.title || "Job Posting";
+    let cleanTitle = customTitle || currentTab.title || "Job Posting";
     let companyName = "Career Portal";
     try {
-      if (tab.url) {
-        const urlObj = new URL(tab.url);
+      if (currentTab.url) {
+        const urlObj = new URL(currentTab.url);
         companyName = urlObj.hostname.replace(/^(www\.|jobs\.|careers\.)/, "").split(".")[0];
         companyName = companyName.charAt(0).toUpperCase() + companyName.slice(1);
       }
@@ -88,8 +90,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       company: companyName,
       location: "Remote",
       atsType: "web",
-      jdText: (tab.title || "") + " " + (tab.url || ""),
-      url: tab.url || "",
+      jdText: (currentTab.title || "") + " " + (currentTab.url || ""),
+      url: (currentTab.url && currentTab.url.startsWith("http")) ? currentTab.url : "https://example.jobpilot.io/dummy-job-for-testing",
     };
 
     detectedTitle.textContent = cleanTitle;
@@ -99,42 +101,46 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Handle restricted browser pages
-  if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("about:")) {
+  if (!currentTab.url || currentTab.url.startsWith("chrome://") || currentTab.url.startsWith("edge://") || currentTab.url.startsWith("about:") || currentTab.url.startsWith("chrome-extension://")) {
     fallbackTabInfo("Open any job posting in your browser.");
-    return;
-  }
-
-  // Request extracted job data from content script
-  try {
-    let res;
+    // Do NOT return here, so that the clipBtn listener is still attached!
+  } else {
+    // Request extracted job data from content script
     try {
-      res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
-    } catch (err) {
-      // If content script was not injected, inject now
-      if (chrome.scripting && tab.id) {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ["content.js"]
-        });
-        await chrome.scripting.insertCSS({
-          target: { tabId: tab.id },
-          files: ["content.css"]
-        });
-        res = await chrome.tabs.sendMessage(tab.id, { action: "GET_JOB_DATA" });
+      let res;
+      try {
+        res = await chrome.tabs.sendMessage(currentTab.id, { action: "GET_JOB_DATA" });
+      } catch (err) {
+        // If content script was not injected, inject now
+        if (chrome.scripting && currentTab.id) {
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: currentTab.id },
+              files: ["content.js"]
+            });
+            await chrome.scripting.insertCSS({
+              target: { tabId: currentTab.id },
+              files: ["content.css"]
+            });
+            res = await chrome.tabs.sendMessage(currentTab.id, { action: "GET_JOB_DATA" });
+          } catch (scriptErr) {
+            // Ignore injection errors on restricted pages
+          }
+        }
       }
-    }
 
-    if (res && res.title) {
-      pageJobData = res;
-      detectedTitle.textContent = res.title;
-      detectedCompany.textContent = res.company || "Company";
-      detectedLocation.textContent = res.location || "Remote";
-      atsBadge.textContent = res.atsType || "Web";
-    } else {
+      if (res && res.title) {
+        pageJobData = res;
+        detectedTitle.textContent = res.title;
+        detectedCompany.textContent = res.company || "Company";
+        detectedLocation.textContent = res.location || "Remote";
+        atsBadge.textContent = res.atsType || "Web";
+      } else {
+        fallbackTabInfo();
+      }
+    } catch (e) {
       fallbackTabInfo();
     }
-  } catch (e) {
-    fallbackTabInfo();
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -148,22 +154,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const payload = {
       company_name: pageJobData?.company || "Company",
-      title: pageJobData?.title || tab.title || "Job Posting",
+      title: pageJobData?.title || currentTab.title || "Job Posting",
       location: pageJobData?.location || "Remote",
       workplace_type: "Remote",
       job_type: "Full-time",
-      jd_text: pageJobData?.jdText || (tab.title + " " + tab.url),
-      apply_url: tab.url || "",
+      jd_text: pageJobData?.jdText || (currentTab.title + " " + currentTab.url),
+      apply_url: pageJobData?.url || (currentTab.url && currentTab.url.startsWith("http") ? currentTab.url : "https://example.jobpilot.io/dummy-job-for-testing"),
     };
 
     chrome.runtime.sendMessage({ action: "CLIP_JOB_POSTING", payload, token: currentToken }, (res) => {
       if (res && res.success) {
         const score = res.score || 85;
-        showStatus(`✓ Clipped & scored: <b>${score}% Fit</b>! <a href="http://localhost:3000/pipeline" target="_blank" style="color:#6ee7b7; text-decoration:underline; font-weight:700;">Open Pipeline →</a>`, true);
+        showStatus(`✓ Clipped & scored: <b>${score}% Fit</b>! <a href="${WEB_BASE}/pipeline" target="_blank" style="color:#6ee7b7; text-decoration:underline; font-weight:700;">Open Pipeline →</a>`, true);
         clipBtn.innerHTML = "<span>✅ Clipped to JobPilot!</span>";
         clipBtn.style.background = "#10b981";
       } else {
-        const errMsg = res?.error || "Could not clip job. Please make sure backend is running and you are logged in at localhost:3000.";
+        const errMsg = res?.error || `Could not clip job. Please make sure backend is running and you are logged in at ${WEB_BASE}.`;
         showStatus(`Error: ${errMsg}`, false);
         clipBtn.disabled = false;
         clipBtn.innerHTML = "<span>📌 1-Click Clip & Score Job</span>";
@@ -188,7 +194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       if (!currentProfile) {
-        showStatus(`Please <a href="http://localhost:3000/login" target="_blank" style="color:#fda4af; text-decoration:underline; font-weight:700;">log in to JobPilot</a> first so your Master Profile can be used for autofill.`, false);
+        showStatus(`Please <a href="${WEB_BASE}/login" target="_blank" style="color:#fda4af; text-decoration:underline; font-weight:700;">log in to JobPilot</a> first so your Master Profile can be used for autofill.`, false);
         autofillBtn.disabled = false;
         autofillBtn.innerHTML = "<span>⚡ Auto-Fill Application Form</span>";
         return;

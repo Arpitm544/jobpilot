@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/authContext';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import ResumeUploader from '@/components/resume/ResumeUploader';
 import ProfileEditor from '@/components/profile/ProfileEditor';
 import {
@@ -43,34 +44,6 @@ import {
   FileCheck
 } from 'lucide-react';
 
-const SAMPLE_RESUME_TEXT = `Alex Mercer
-alex.mercer@devmail.com | +1 (555) 382-9901 | San Francisco, CA
-https://linkedin.com/in/alexmercer | https://github.com/alexmercer
-
-Professional Summary:
-Passionate Full-Stack Engineer with 3+ years of experience architecting high-performance web applications using React, Next.js, FastAPI, and PostgreSQL. Experienced in building automated pipelines, microservices, and modern UI systems.
-
-Technical Skills:
-- Languages: JavaScript, Python, TypeScript, SQL, HTML, CSS
-- Frameworks & Libraries: React, Next.js, FastAPI, Node.js, Tailwind CSS, Express
-- Databases: PostgreSQL, Redis, MongoDB, SQLite
-- Cloud & DevOps: Docker, AWS, Git, CI/CD, Linux
-
-Experience:
-Senior Software Engineer | CloudScale Inc.
-June 2022 - Present | San Francisco, CA
-- Built scalable distributed backend microservices handling 25,000+ requests per second using FastAPI and Redis.
-- Redesigned core dashboard using Next.js and Tailwind CSS, improving page load speeds by 42%.
-- Integrated automated testing suites and CI/CD pipelines reducing deployment failure rates by 35%.
-
-Software Engineer Intern | Innovate Labs
-Jan 2021 - May 2022 | Remote
-- Developed reusable UI components and state management with React and TanStack Query.
-- Architected RESTful endpoints and optimized database queries in PostgreSQL.
-
-Education:
-B.S. in Computer Science | University of California, Berkeley
-2018 - 2022 | GPA: 3.85 / 4.0`;
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -364,7 +337,7 @@ export default function OnboardingPage() {
         }
       }
     } catch (e) {
-      console.warn('Failed to fetch github suggestions:', e);
+      logger.warn('Failed to fetch github suggestions:', e);
     } finally {
       setGithubSuggestionsLoading(false);
     }
@@ -430,7 +403,7 @@ export default function OnboardingPage() {
         }
       }
     } catch (e) {
-      console.error('Failed to fetch onboarding state:', e);
+      logger.error('Failed to fetch onboarding state:', e);
       setStateError(true);
     }
   };
@@ -463,7 +436,7 @@ export default function OnboardingPage() {
         setQuestions((prev) => ({ ...prev, ...qbRes.value.data }));
       }
     } catch (e) {
-      console.error('Failed to load user data concurrently:', e);
+      logger.error('Failed to load user data concurrently:', e);
     }
 
     setStateLoading(false);
@@ -515,7 +488,7 @@ export default function OnboardingPage() {
         }
       }
     } catch (err) {
-      console.error('Failed to retrieve parsed resume:', err);
+      logger.error('Failed to retrieve parsed resume:', err);
       setError(err.response?.data?.detail || 'Failed to retrieve parsed resume.');
     } finally {
       setUploadLoading(false);
